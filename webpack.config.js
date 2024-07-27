@@ -395,7 +395,9 @@ module.exports = () => {
                               'ALLOC_NORMAL',
                               'ALLOC_STACK',
                               'allocate',
-                              'grow'
+                              'grow',
+                              // webgl context option
+                              'preserveDrawingBuffer'
                           ]
                       }
                   },
