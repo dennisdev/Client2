@@ -88,7 +88,7 @@ class Game extends Client {
             }
 
             if (!Client.lowMemory) {
-                await this.setMidi('scape_main', 12345678, 40000);
+                await this.setMidi('scape_main', 12345678, 40000, false);
             }
 
             const title: Jagfile = await this.loadArchive('title', 'title screen', this.archiveChecksums[1], 10);
@@ -953,7 +953,7 @@ class Game extends Client {
                 for (let i: number = 0; i < 5; i++) {
                     this.designColors[i] = 0;
                 }
-                stopMidi(); // custom fix :-)
+                stopMidi(true); // custom fix :-)
                 Client.oplogic1 = 0;
                 Client.oplogic2 = 0;
                 Client.oplogic3 = 0;
@@ -1120,7 +1120,7 @@ class Game extends Client {
                 }
 
                 if (this.nextMusicDelay === 0 && this.midiActive && !Client.lowMemory && this.currentMidi) {
-                    await this.setMidi(this.currentMidi, this.midiCrc, this.midiSize);
+                    await this.setMidi(this.currentMidi, this.midiCrc, this.midiSize, false);
                 }
             }
 
@@ -4836,11 +4836,11 @@ class Game extends Client {
             this.levelCollisionMap[level]?.reset();
         }
 
-        stopMidi();
+        stopMidi(false);
         this.currentMidi = null;
         this.nextMusicDelay = 0;
         if (!Client.lowMemory) {
-            await this.setMidi('scape_main', 12345678, 40000);
+            await this.setMidi('scape_main', 12345678, 40000, false);
         }
     };
 
@@ -5201,7 +5201,7 @@ class Game extends Client {
                 const crc: number = this.in.g4;
                 const length: number = this.in.g4;
                 if (!(name === this.currentMidi) && this.midiActive && !Client.lowMemory) {
-                    await this.setMidi(name, crc, length);
+                    await this.setMidi(name, crc, length, true);
                 }
                 this.currentMidi = name;
                 this.midiCrc = crc;
@@ -5467,7 +5467,7 @@ class Game extends Client {
                     const length: number = this.in.g4;
                     const remaining: number = this.packetSize - 6;
                     const uncompressed: Int8Array = Bzip.read(length, Int8Array.from(this.in.data), remaining, this.in.pos);
-                    playMidi(uncompressed, this.midiVolume);
+                    playMidi(uncompressed, this.midiVolume, false);
                     this.nextMusicDelay = delay;
                 }
                 this.packetType = -1;
@@ -6207,9 +6207,9 @@ class Game extends Client {
                 }
                 if (this.midiActive !== lastMidiActive) {
                     if (this.midiActive && this.currentMidi) {
-                        await this.setMidi(this.currentMidi, this.midiCrc, this.midiSize);
+                        await this.setMidi(this.currentMidi, this.midiCrc, this.midiSize, false);
                     } else {
-                        stopMidi();
+                        stopMidi(false);
                     }
                     this.nextMusicDelay = 0;
                 }
