@@ -4,6 +4,7 @@
   "description": "This project is a comprehensive source port of our [Client refactor](https://github.com/2004scape/Client) to TypeScript.",
   "dependencies": {
     "foundation-sites": "^6.8.1",
+    "gl-matrix": "^3.4.3",
     "jquery": "^3.7.1"
   },
   "devDependencies": {

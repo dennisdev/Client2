@@ -10,7 +10,8 @@
         "checkJs": false,
         "strict": true,
         "alwaysStrict": true,
-        "allowSyntheticDefaultImports": true
+        "allowSyntheticDefaultImports": true,
+        "moduleResolution": "node",
     },
     "include": [
         "src/js/**/*.ts",

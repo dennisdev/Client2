@@ -64,6 +64,7 @@ import FloType from './jagex2/config/FloType';
 import {setupConfiguration} from './configuration';
 import Tile from './jagex2/dash3d/type/Tile';
 import DirectionFlag from './jagex2/dash3d/DirectionFlag';
+import {Renderer} from './jagex2/graphics/RendererGL';
 
 // noinspection JSSuspiciousNameCombination
 class Game extends Client {
@@ -341,6 +342,7 @@ class Game extends Client {
     };
 
     draw = async (): Promise<void> => {
+        Renderer.startFrame();
         if (this.errorStarted || this.errorLoading || this.errorHost) {
             this.drawError();
             return;
@@ -351,6 +353,7 @@ class Game extends Client {
             await this.drawTitleScreen();
         }
         this.dragCycles = 0;
+        Renderer.endFrame();
     };
 
     refresh = (): void => {
@@ -1725,8 +1728,14 @@ class Game extends Client {
         Model.pickedCount = 0;
         Model.mouseX = this.mouseX - 8;
         Model.mouseY = this.mouseY - 11;
-        Draw2D.clear();
+        if (Renderer.enabled) {
+            Draw2D.clear(-1);
+        } else {
+            Draw2D.clear(0);
+        }
+        Renderer.startDrawScene();
         this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
+        Renderer.endDrawScene();
         this.scene?.clearTemporaryLocs();
         this.draw2DEntityElements();
         this.drawTileHint();
@@ -4243,6 +4252,8 @@ class Game extends Client {
                                 }
                             } else if (this.chatTyped === '::debug') {
                                 Client.showDebug = !Client.showDebug;
+                            } else if (this.chatTyped === '::gpu') {
+                                Renderer.enabled = !Renderer.enabled;
                             } else if (this.chatTyped === '::chat') {
                                 Client.chatEra = (Client.chatEra + 1) % 3;
                             } else if (this.chatTyped.startsWith('::fps ')) {
@@ -4478,7 +4489,7 @@ class Game extends Client {
             Draw2D.clear();
             this.imageMapback?.draw(0, 0);
             this.areaSidebar = new PixMap(190, 261);
-            this.areaViewport = new PixMap(512, 334);
+            this.areaViewport = Renderer.areaViewport = new PixMap(512, 334);
             Draw2D.clear();
             this.areaBackbase1 = new PixMap(501, 61);
             this.areaBackbase2 = new PixMap(288, 40);
@@ -6084,6 +6095,8 @@ class Game extends Client {
                     }
                 }
             }
+
+            Renderer.onSceneLoaded(this.scene);
 
             for (let x: number = 0; x < CollisionMap.SIZE; x++) {
                 for (let z: number = 0; z < CollisionMap.SIZE; z++) {

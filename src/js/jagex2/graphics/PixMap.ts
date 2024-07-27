@@ -1,13 +1,14 @@
 import Draw2D from './Draw2D';
 import {canvas2d} from './Canvas';
+import {Renderer} from './RendererGL';
 
 export default class PixMap {
     // constructor
     private readonly image: ImageData;
-    private readonly width: number;
-    private readonly height: number;
+    readonly width: number;
+    readonly height: number;
     private readonly ctx: CanvasRenderingContext2D;
-    private readonly paint: Uint32Array;
+    readonly paint: Uint32Array;
     readonly pixels: Int32Array;
 
     constructor(width: number, height: number, ctx: CanvasRenderingContext2D = canvas2d) {
@@ -29,6 +30,9 @@ export default class PixMap {
     }
 
     draw(x: number, y: number): void {
+        if (Renderer.drawPixMap(this, x, y)) {
+            return;
+        }
         this.#setPixels();
         this.ctx.putImageData(this.image, x, y);
     }

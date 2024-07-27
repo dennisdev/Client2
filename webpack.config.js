@@ -64,7 +64,13 @@ const config = {
         host: 'localhost',
         static: 'public',
         liveReload: true,
-        compress: true
+        compress: true,
+        client: {
+            overlay: {
+                errors: true,
+                warnings: false
+            }
+        }
     },
 
     experiments: {

@@ -8,6 +8,7 @@ import AnimBase from './AnimBase';
 
 import Hashable from '../datastruct/Hashable';
 import {Int32Array2d, TypedArray1d} from '../util/Arrays';
+import {Renderer} from './RendererGL';
 
 class Metadata {
     vertexCount: number = 0;
@@ -2039,6 +2040,8 @@ export default class Model extends Hashable {
 
     // todo: better name, Java relies on overloads
     draw(yaw: number, sinEyePitch: number, cosEyePitch: number, sinEyeYaw: number, cosEyeYaw: number, relativeX: number, relativeY: number, relativeZ: number, bitset: number): void {
+        Renderer.startDrawModel(this, yaw, relativeX, relativeY, relativeZ, bitset);
+
         const zPrime: number = (relativeZ * cosEyeYaw - relativeX * sinEyeYaw) >> 16;
         const midZ: number = (relativeY * sinEyePitch + zPrime * cosEyePitch) >> 16;
         const radiusCosEyePitch: number = (this.radius * cosEyePitch) >> 16;
@@ -2170,6 +2173,8 @@ export default class Model extends Hashable {
         } catch (err) {
             /* empty */
         }
+
+        Renderer.endDrawModel(this, yaw, relativeX, relativeY, relativeZ, bitset);
     }
 
     // todo: better name, Java relies on overloads
@@ -2436,6 +2441,9 @@ export default class Model extends Hashable {
     }
 
     private drawFace(face: number, wireframe: boolean = false): void {
+        if (Renderer.drawModelTriangle(this, face)) {
+            return;
+        }
         if (Model.faceNearClipped && Model.faceNearClipped[face]) {
             this.drawNearClippedFace(face, wireframe);
             return;

@@ -2,6 +2,7 @@ import Draw2D from './Draw2D';
 import Pix8 from './Pix8';
 import Jagfile from '../io/Jagfile';
 import {Int32Array2d, TypedArray1d} from '../util/Arrays';
+import {Renderer} from './RendererGL';
 
 // noinspection JSSuspiciousNameCombination,DuplicatedCode
 export default class Draw3D extends Draw2D {
@@ -232,6 +233,8 @@ export default class Draw3D extends Draw2D {
         for (let id: number = 0; id < 50; id++) {
             this.pushTexture(id);
         }
+
+        Renderer.setBrightness(randomBrightness);
     };
 
     private static setGamma = (rgb: number, gamma: number): number => {
@@ -2526,7 +2529,7 @@ export default class Draw3D extends Draw2D {
         }
     };
 
-    private static getTexels = (id: number): Int32Array | null => {
+    public static getTexels = (id: number): Int32Array | null => {
         this.textureCycle[id] = this.cycle++;
         if (this.activeTexels[id]) {
             return this.activeTexels[id];
