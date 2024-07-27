@@ -675,7 +675,7 @@ export class Renderer {
 
         // Render scene
         if (pixMap === Renderer.areaViewport && Renderer.enabled) {
-            const viewportWidth: number = pixMap.width - 1;
+            const viewportWidth: number = pixMap.width;
             const viewportHeight: number = pixMap.height;
             if (Renderer.viewportFramebuffer === undefined || Renderer.viewportWidth !== viewportWidth || Renderer.viewportHeight !== viewportHeight) {
                 if (Renderer.viewportFramebuffer !== undefined) {
@@ -793,9 +793,12 @@ export class Renderer {
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-            gl.disable(gl.DEPTH_TEST);
+            // gl.disable(gl.DEPTH_TEST);
 
             this.drawTexture(Renderer.viewportColorTexture, x, y, viewportWidth, viewportHeight);
+
+            // Draw right side 1 pixel border
+            this.drawTexture(null, x + viewportWidth - 1, y, 1, viewportHeight);
         }
 
         const pixels: Uint8Array = new Uint8Array(pixMap.pixels.buffer);
@@ -809,7 +812,7 @@ export class Renderer {
         return Renderer.enabled;
     }
 
-    static drawTexture(texture: WebGLTexture, x: number, y: number, width: number, height: number): void {
+    static drawTexture(texture: WebGLTexture | null, x: number, y: number, width: number, height: number): void {
         Renderer.frameProgram.use();
 
         gl.bindTexture(gl.TEXTURE_2D, texture);
