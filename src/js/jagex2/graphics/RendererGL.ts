@@ -676,7 +676,7 @@ export class Renderer {
         // Render scene
         if (pixMap === Renderer.areaViewport && Renderer.enabled) {
             const viewportWidth: number = pixMap.width - 1;
-            const viewportHeight: number = pixMap.height - 1;
+            const viewportHeight: number = pixMap.height;
             if (Renderer.viewportFramebuffer === undefined || Renderer.viewportWidth !== viewportWidth || Renderer.viewportHeight !== viewportHeight) {
                 if (Renderer.viewportFramebuffer !== undefined) {
                     gl.deleteFramebuffer(Renderer.viewportFramebuffer);
