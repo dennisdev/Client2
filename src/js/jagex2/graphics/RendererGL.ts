@@ -673,132 +673,12 @@ export class Renderer {
             pixMapTexture.lastFrameUsed = Renderer.frame;
         }
 
-        // Render scene
+        // Render scene framebuffer
         if (pixMap === Renderer.areaViewport && Renderer.enabled) {
-            const viewportWidth: number = pixMap.width;
-            const viewportHeight: number = pixMap.height;
-            if (Renderer.viewportFramebuffer === undefined || Renderer.viewportWidth !== viewportWidth || Renderer.viewportHeight !== viewportHeight) {
-                if (Renderer.viewportFramebuffer !== undefined) {
-                    gl.deleteFramebuffer(Renderer.viewportFramebuffer);
-                    gl.deleteTexture(Renderer.viewportColorTexture);
-                    gl.deleteRenderbuffer(Renderer.viewportDepthBuffer);
-                }
-                // console.log("Creating viewport framebuffer", x, y, pixMap.width, pixMap.height);
-                Renderer.viewportFramebuffer = gl.createFramebuffer()!;
-                Renderer.viewportWidth = viewportWidth;
-                Renderer.viewportHeight = viewportHeight;
-                const colorTexture: WebGLTexture = (Renderer.viewportColorTexture = gl.createTexture()!);
-                gl.bindTexture(gl.TEXTURE_2D, colorTexture);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, viewportWidth, viewportHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-                const depthBuffer: WebGLRenderbuffer = (Renderer.viewportDepthBuffer = gl.createRenderbuffer()!);
-                gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
-                gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, viewportWidth, viewportHeight);
-
-                gl.bindFramebuffer(gl.FRAMEBUFFER, Renderer.viewportFramebuffer);
-
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
-                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
-            } else {
-                gl.bindFramebuffer(gl.FRAMEBUFFER, Renderer.viewportFramebuffer);
-            }
-
-            // gl.enable(gl.DEPTH_TEST);
-
-            const centerX: number = Draw3D.centerX;
-            const centerY: number = Draw3D.centerY;
-
-            gl.viewport(0, 0, viewportWidth, viewportHeight);
-
-            gl.clearColor(0.0, 0, 0, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-            Renderer.mainProgram.use();
-
-            gl.uniform1f(Renderer.timeLoc, performance.now() / 1000);
-            gl.uniform1f(Renderer.brightnessLoc, Renderer.brightness);
-
-            Renderer.cameraPos[0] = World3D.eyeX;
-            Renderer.cameraPos[1] = World3D.eyeY;
-            Renderer.cameraPos[2] = World3D.eyeZ;
-            const yaw: number = Renderer.cameraYaw;
-            const pitch: number = Renderer.cameraPitch;
-            const zoom: number = DEFAULT_ZOOM;
-            Renderer.setFrustumProjectionMatrix(Renderer.projectionMatrix, 0, 0, centerX, centerY, viewportWidth, viewportHeight, yaw, pitch, zoom);
-            Renderer.setCameraMatrix(Renderer.cameraMatrix, Renderer.cameraPos);
-            mat4.invert(Renderer.viewMatrix, Renderer.cameraMatrix);
-            mat4.multiply(Renderer.viewProjectionMatrix, Renderer.projectionMatrix, Renderer.viewMatrix);
-
-            gl.uniformMatrix4fv(Renderer.viewProjectionMatrixLoc, false, Renderer.viewProjectionMatrix);
-
-            if (Renderer.vertexBuffer) {
-                gl.deleteBuffer(Renderer.vertexBuffer);
-                Renderer.vertexBuffer = null;
-            }
-            if (Renderer.indexBuffer) {
-                gl.deleteBuffer(Renderer.indexBuffer);
-                Renderer.indexBuffer = null;
-            }
-
-            const vertexDataBuffer: VertexDataBuffer = Renderer.vertexDataBuffer;
-            const indexDataBuffer: IndexDataBuffer = Renderer.indexDataBuffer;
-
-            const vertexCount: number = vertexDataBuffer.pos / VertexDataBuffer.STRIDE;
-            const elementCount: number = indexDataBuffer.pos;
-
-            if (elementCount > 0) {
-                gl.bindTexture(gl.TEXTURE_2D_ARRAY, Renderer.textureArray);
-
-                gl.bindVertexArray(Renderer.vertexArray);
-
-                Renderer.vertexBuffer = gl.createBuffer()!;
-                gl.bindBuffer(gl.ARRAY_BUFFER, Renderer.vertexBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, vertexDataBuffer.data, gl.STATIC_DRAW, 0, vertexDataBuffer.pos);
-
-                gl.vertexAttribPointer(Renderer.positionAttrLoc, 4, gl.FLOAT, false, VertexDataBuffer.STRIDE, 0);
-                gl.vertexAttribPointer(Renderer.texCoordAttrLoc, 4, gl.FLOAT, false, VertexDataBuffer.STRIDE, 4 * 4);
-
-                Renderer.indexBuffer = gl.createBuffer()!;
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, Renderer.indexBuffer);
-                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexDataBuffer.indices, gl.STATIC_DRAW, 0, indexDataBuffer.pos);
-
-                const position: Float32Array = new Float32Array(3);
-
-                let drawCount: number = 0;
-                const drawCommands: DrawCommands = Renderer.drawCommands;
-                drawCommands.reduce();
-                for (let i: number = 0; i < drawCommands.count; i++) {
-                    const offset: number = drawCommands.offsets[i];
-                    const count: number = drawCommands.counts[i];
-                    if (count === 0) {
-                        continue;
-                    }
-                    const angle: number = ((2048 - drawCommands.yaws[i]) & 0x7ff) * RS_TO_RADIANS;
-                    position[0] = drawCommands.positions[i * 3];
-                    position[1] = drawCommands.positions[i * 3 + 1];
-                    position[2] = drawCommands.positions[i * 3 + 2];
-                    gl.uniform1f(Renderer.angleLoc, angle);
-                    gl.uniform3fv(Renderer.translationLoc, position);
-                    gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, offset * 4);
-                    drawCount++;
-                }
-
-                gl.bindVertexArray(null);
-                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-            }
-
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-            // gl.disable(gl.DEPTH_TEST);
-
-            this.drawTexture(Renderer.viewportColorTexture, x, y, viewportWidth, viewportHeight);
+            this.drawTexture(Renderer.viewportColorTexture, x, y, pixMap.width, pixMap.height);
 
             // Draw right side 1 pixel border
-            this.drawTexture(null, x + viewportWidth - 1, y, 1, viewportHeight);
+            this.drawTexture(null, x + pixMap.width - 1, y, 1, pixMap.height);
         }
 
         const pixels: Uint8Array = new Uint8Array(pixMap.pixels.buffer);
@@ -844,6 +724,126 @@ export class Renderer {
 
     static endDrawScene(): void {
         Renderer.isDrawingScene = false;
+
+        // Render scene
+        const pixMap: PixMap = Renderer.areaViewport;
+        const viewportWidth: number = pixMap.width;
+        const viewportHeight: number = pixMap.height;
+        if (Renderer.viewportFramebuffer === undefined || Renderer.viewportWidth !== viewportWidth || Renderer.viewportHeight !== viewportHeight) {
+            if (Renderer.viewportFramebuffer !== undefined) {
+                gl.deleteFramebuffer(Renderer.viewportFramebuffer);
+                gl.deleteTexture(Renderer.viewportColorTexture);
+                gl.deleteRenderbuffer(Renderer.viewportDepthBuffer);
+            }
+            // console.log("Creating viewport framebuffer", x, y, pixMap.width, pixMap.height);
+            Renderer.viewportFramebuffer = gl.createFramebuffer()!;
+            Renderer.viewportWidth = viewportWidth;
+            Renderer.viewportHeight = viewportHeight;
+            const colorTexture: WebGLTexture = (Renderer.viewportColorTexture = gl.createTexture()!);
+            gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, viewportWidth, viewportHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            const depthBuffer: WebGLRenderbuffer = (Renderer.viewportDepthBuffer = gl.createRenderbuffer()!);
+            gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
+            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, viewportWidth, viewportHeight);
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, Renderer.viewportFramebuffer);
+
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
+        } else {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, Renderer.viewportFramebuffer);
+        }
+
+        // gl.enable(gl.DEPTH_TEST);
+
+        const centerX: number = Draw3D.centerX;
+        const centerY: number = Draw3D.centerY;
+
+        gl.viewport(0, 0, viewportWidth, viewportHeight);
+
+        gl.clearColor(0.0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        Renderer.mainProgram.use();
+
+        gl.uniform1f(Renderer.timeLoc, performance.now() / 1000);
+        gl.uniform1f(Renderer.brightnessLoc, Renderer.brightness);
+
+        Renderer.cameraPos[0] = World3D.eyeX;
+        Renderer.cameraPos[1] = World3D.eyeY;
+        Renderer.cameraPos[2] = World3D.eyeZ;
+        const yaw: number = Renderer.cameraYaw;
+        const pitch: number = Renderer.cameraPitch;
+        const zoom: number = DEFAULT_ZOOM;
+        Renderer.setFrustumProjectionMatrix(Renderer.projectionMatrix, 0, 0, centerX, centerY, viewportWidth, viewportHeight, yaw, pitch, zoom);
+        Renderer.setCameraMatrix(Renderer.cameraMatrix, Renderer.cameraPos);
+        mat4.invert(Renderer.viewMatrix, Renderer.cameraMatrix);
+        mat4.multiply(Renderer.viewProjectionMatrix, Renderer.projectionMatrix, Renderer.viewMatrix);
+
+        gl.uniformMatrix4fv(Renderer.viewProjectionMatrixLoc, false, Renderer.viewProjectionMatrix);
+
+        if (Renderer.vertexBuffer) {
+            gl.deleteBuffer(Renderer.vertexBuffer);
+            Renderer.vertexBuffer = null;
+        }
+        if (Renderer.indexBuffer) {
+            gl.deleteBuffer(Renderer.indexBuffer);
+            Renderer.indexBuffer = null;
+        }
+
+        const vertexDataBuffer: VertexDataBuffer = Renderer.vertexDataBuffer;
+        const indexDataBuffer: IndexDataBuffer = Renderer.indexDataBuffer;
+
+        const vertexCount: number = vertexDataBuffer.pos / VertexDataBuffer.STRIDE;
+        const elementCount: number = indexDataBuffer.pos;
+
+        if (elementCount > 0) {
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, Renderer.textureArray);
+
+            gl.bindVertexArray(Renderer.vertexArray);
+
+            Renderer.vertexBuffer = gl.createBuffer()!;
+            gl.bindBuffer(gl.ARRAY_BUFFER, Renderer.vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertexDataBuffer.data, gl.STATIC_DRAW, 0, vertexDataBuffer.pos);
+
+            gl.vertexAttribPointer(Renderer.positionAttrLoc, 4, gl.FLOAT, false, VertexDataBuffer.STRIDE, 0);
+            gl.vertexAttribPointer(Renderer.texCoordAttrLoc, 4, gl.FLOAT, false, VertexDataBuffer.STRIDE, 4 * 4);
+
+            Renderer.indexBuffer = gl.createBuffer()!;
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, Renderer.indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexDataBuffer.indices, gl.STATIC_DRAW, 0, indexDataBuffer.pos);
+
+            const position: Float32Array = new Float32Array(3);
+
+            let drawCount: number = 0;
+            const drawCommands: DrawCommands = Renderer.drawCommands;
+            drawCommands.reduce();
+            for (let i: number = 0; i < drawCommands.count; i++) {
+                const offset: number = drawCommands.offsets[i];
+                const count: number = drawCommands.counts[i];
+                if (count === 0) {
+                    continue;
+                }
+                const angle: number = ((2048 - drawCommands.yaws[i]) & 0x7ff) * RS_TO_RADIANS;
+                position[0] = drawCommands.positions[i * 3];
+                position[1] = drawCommands.positions[i * 3 + 1];
+                position[2] = drawCommands.positions[i * 3 + 2];
+                gl.uniform1f(Renderer.angleLoc, angle);
+                gl.uniform3fv(Renderer.translationLoc, position);
+                gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, offset * 4);
+                drawCount++;
+            }
+
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        }
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
     static drawTileUnderlay(world: World3D, underlay: TileUnderlay, level: number, tileX: number, tileZ: number): boolean {
