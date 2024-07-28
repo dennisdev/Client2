@@ -134,7 +134,6 @@ class VertexDataBuffer {
         }
     }
 
-    // TODO: pack to improve performance/bandwidth
     addVertex(x: number, y: number, z: number, hsl: number, alpha: number, textureId: number, texCoordU: number, texCoordV: number): number {
         this.growIfRequired(1);
         const index: number = this.pos / VertexDataBuffer.STRIDE;
@@ -399,6 +398,10 @@ vec3 hslToRgb(int hsl, float brightness) {
 const mainVertSource: string = `
 #version 300 es
 
+#ifdef GL_NV_shader_noperspective_interpolation
+#extension GL_NV_shader_noperspective_interpolation : require
+#endif
+
 #define TEXTURE_ANIM_UNIT (1.0f / 128.0f)
 
 uniform float u_time;
@@ -410,6 +413,9 @@ uniform vec3 u_translation;
 
 layout(location = 0) in uvec3 a_packed;
 
+#ifdef GL_NV_shader_noperspective_interpolation
+noperspective centroid out float v_hsl;
+#endif
 out vec4 v_color;
 out vec3 v_texCoord;
 
@@ -469,6 +475,7 @@ void main() {
     } else {
         v_color = vec4(hslToRgb(vertex.hsl, u_brightness), vertex.alpha);
     }
+    v_hsl = float(vertex.hsl);
     v_texCoord = vec3(vertex.texCoord, float(textureId + 1));
     // scrolling textures
     if (textureId == 17 || textureId == 24) {
@@ -479,16 +486,25 @@ void main() {
 const mainFragSource: string = `
 #version 300 es
 
+#ifdef GL_NV_shader_noperspective_interpolation
+#extension GL_NV_shader_noperspective_interpolation : require
+#endif
+
 precision highp float;
 
 uniform float u_brightness;
 
 uniform highp sampler2DArray u_textures;
 
+#ifdef GL_NV_shader_noperspective_interpolation
+noperspective centroid in float v_hsl;
+#endif
 in vec4 v_color;
 in vec3 v_texCoord;
 
 out vec4 fragColor;
+
+${hslToRgbGlsl}
 
 vec3 getShadedColor(int rgb, int shadowFactor) {
     int shadowFactors[4] = int[](
@@ -512,8 +528,12 @@ void main() {
         fragColor.rgb = getShadedColor(rgb, shadowFactor);
         fragColor.a = texColor.a;
     } else {
-        // emulate color banding
-        fragColor.rgb = round(v_color.rgb * 64.0) / 64.0;
+        #ifdef GL_NV_shader_noperspective_interpolation
+            fragColor.rgb = hslToRgb(int(v_hsl), u_brightness);
+        #else
+            // emulate color banding
+            fragColor.rgb = round(v_color.rgb * 64.0) / 64.0;
+        #endif
         fragColor.a = v_color.a;
     }
 }
@@ -528,6 +548,19 @@ const DEFAULT_ZOOM: number = 512;
 
 const NEAR: number = 50;
 const FAR: number = 3500;
+
+interface WEBGL_provoking_vertex {
+    FIRST_VERTEX_CONVENTION_WEBGL: number;
+    LAST_VERTEX_CONVENTION_WEBGL: number;
+    provokingVertexWEBGL(mode: number): void;
+}
+
+function optimizeAssumingFlatsHaveSameFirstAndLastData(gl: WebGL2RenderingContext): void {
+    const epv: WEBGL_provoking_vertex = gl.getExtension('WEBGL_provoking_vertex');
+    if (epv) {
+        epv.provokingVertexWEBGL(epv.FIRST_VERTEX_CONVENTION_WEBGL);
+    }
+}
 
 // TODO: properly implement a toggle for this
 // TODO: try using a separate buffer for static models to reduce bandwidth
@@ -597,6 +630,10 @@ export class Renderer {
 
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        optimizeAssumingFlatsHaveSameFirstAndLastData(gl);
+
+        gl.getExtension('NV_shader_noperspective_interpolation');
 
         const frameVertShader: Shader = new Shader(gl, gl.VERTEX_SHADER, frameVertSource);
         const frameFragShader: Shader = new Shader(gl, gl.FRAGMENT_SHADER, frameFragSource);
