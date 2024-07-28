@@ -105,8 +105,14 @@ export function createProgram(ctx: Context, shaders: Iterable<Shader>): ShaderPr
     return program;
 }
 
+const clamp = (num: number, min: number, max: number): number => Math.min(Math.max(num, min), max);
+
+function packFloat11(v: number): number {
+    return 1024 - Math.round(v / (1 / 64));
+}
+
 class VertexDataBuffer {
-    static readonly STRIDE: number = 8 * 4;
+    static readonly STRIDE: number = 12;
 
     data: Uint8Array;
     view: DataView;
@@ -132,14 +138,31 @@ class VertexDataBuffer {
     addVertex(x: number, y: number, z: number, hsl: number, alpha: number, textureId: number, texCoordU: number, texCoordV: number): number {
         this.growIfRequired(1);
         const index: number = this.pos / VertexDataBuffer.STRIDE;
-        this.view.setFloat32(this.pos, x, true);
-        this.view.setFloat32(this.pos + 4, y, true);
-        this.view.setFloat32(this.pos + 8, z, true);
-        this.view.setFloat32(this.pos + 12, hsl, true);
-        this.view.setFloat32(this.pos + 16, texCoordU, true);
-        this.view.setFloat32(this.pos + 20, texCoordV, true);
-        this.view.setFloat32(this.pos + 24, textureId + 1, true);
-        this.view.setFloat32(this.pos + 28, alpha / 0xff, true);
+
+        const xPos: number = clamp(x + 0x20000, 0, 0x3ffff); // 18 bit
+        const yPos: number = clamp(-y + 0x800, 0, 0xfff); // 12 bit
+        const zPos: number = clamp(z + 0x20000, 0, 0x3ffff); // 18 bit
+
+        const isTextured: boolean = textureId !== -1;
+        const isTexturedBit: number = isTextured ? 1 : 0;
+
+        let hslPacked: number = hsl & 0xffff; // 16 bit
+        if (isTextured) {
+            hslPacked &= 0x7f;
+            hslPacked |= textureId << 7;
+        }
+
+        const uPacked: number = clamp(packFloat11(texCoordU), 0, 0x7ff);
+        const vPacked: number = clamp(packFloat11(texCoordV), 0, 0x7ff);
+
+        const v0: number = (isTexturedBit << 30) | (yPos << 18) | xPos;
+        const v1: number = ((hslPacked >> 2) << 18) | zPos;
+        const v2: number = ((hslPacked & 0x3) << 30) | (alpha << 22) | (uPacked << 11) | vPacked;
+
+        this.view.setUint32(this.pos, v0, true);
+        this.view.setUint32(this.pos + 4, v1, true);
+        this.view.setUint32(this.pos + 8, v2, true);
+
         this.pos += VertexDataBuffer.STRIDE;
         return index;
     }
@@ -385,13 +408,47 @@ uniform mat4 u_viewProjectionMatrix;
 uniform float u_angle;
 uniform vec3 u_translation;
 
-layout(location = 0) in vec4 a_position;
-layout(location = 1) in vec4 a_texCoord;
+layout(location = 0) in uvec3 a_packed;
 
 out vec4 v_color;
 out vec3 v_texCoord;
 
 ${hslToRgbGlsl}
+
+float unpackFloat11(uint v) {
+    return 16.0 - float(v) / 64.0;
+}
+
+struct Vertex {
+    ivec3 position;
+    int hsl;
+    float alpha;
+    int textureId;
+    vec2 texCoord;
+};
+
+Vertex decodeVertex(uint v0, uint v1, uint v2) {
+    Vertex vertex;
+
+    int isTextured = int(v0 >> 30u);
+
+    vertex.position.x = int(v0 & 0x3ffffu) - 0x20000;
+    vertex.position.y = -(int((v0 >> 18u) & 0xfffu) - 0x800);
+    vertex.position.z = int(v1 & 0x3ffffu) - 0x20000;
+
+    int hslPacked = int(v1 >> 18u) << 2 | int(v2 >> 30u);
+    int textureId = ((hslPacked >> 7) + 1);
+
+    vertex.hsl = hslPacked * (1 - isTextured) + (hslPacked & 0x7f) * isTextured;
+    vertex.alpha = float((v2 >> 22u) & 0xffu) / 255.0;
+
+    vertex.textureId = textureId * isTextured;
+
+    vertex.texCoord.x = unpackFloat11(uint(v2 >> 11u) & 0x7ffu);
+    vertex.texCoord.y = unpackFloat11(uint(v2 & 0x7ffu));
+
+    return vertex;
+}
 
 mat4 rotationY( in float angle ) {
     return mat4(cos(angle),		0,		sin(angle),	0,
@@ -401,19 +458,20 @@ mat4 rotationY( in float angle ) {
 }
 
 void main() {
-    gl_Position = rotationY(u_angle) * vec4(a_position.xyz, 1.0);
+    Vertex vertex = decodeVertex(a_packed.x, a_packed.y, a_packed.z);
+
+    gl_Position = rotationY(u_angle) * vec4(vec3(vertex.position), 1.0);
     gl_Position.xyz += u_translation;
     gl_Position = u_viewProjectionMatrix * gl_Position;
-    float textureId = a_texCoord.z - 1.0;
-    if (textureId >= 0.0) {
-        v_color.r = a_position.w / 127.0;
+    int textureId = vertex.textureId - 1;
+    if (textureId >= 0) {
+        v_color.r = float(vertex.hsl) / 127.0;
     } else {
-        int hsl = int(a_position.w);
-        v_color = vec4(hslToRgb(hsl, u_brightness), a_texCoord.w);
+        v_color = vec4(hslToRgb(vertex.hsl, u_brightness), vertex.alpha);
     }
-    v_texCoord = a_texCoord.xyz;
+    v_texCoord = vec3(vertex.texCoord, float(textureId + 1));
     // scrolling textures
-    if (textureId == 17.0 || textureId == 24.0) {
+    if (textureId == 17 || textureId == 24) {
         v_texCoord.y += u_time / 0.02 * -2.0 * TEXTURE_ANIM_UNIT;
     }
 }
@@ -495,8 +553,7 @@ export class Renderer {
     static angleLoc: WebGLUniformLocation;
     static translationLoc: WebGLUniformLocation;
     static texturesLoc: WebGLUniformLocation;
-    static positionAttrLoc: number;
-    static texCoordAttrLoc: number;
+    static packedAttrLoc: number;
 
     static areaViewport: PixMap;
     static viewportWidth: number;
@@ -560,13 +617,11 @@ export class Renderer {
         Renderer.angleLoc = gl.getUniformLocation(Renderer.mainProgram.program, 'u_angle')!;
         Renderer.translationLoc = gl.getUniformLocation(Renderer.mainProgram.program, 'u_translation')!;
         Renderer.texturesLoc = gl.getUniformLocation(Renderer.mainProgram.program, 'u_textures')!;
-        Renderer.positionAttrLoc = gl.getAttribLocation(Renderer.mainProgram.program, 'a_position');
-        Renderer.texCoordAttrLoc = gl.getAttribLocation(Renderer.mainProgram.program, 'a_texCoord');
+        Renderer.packedAttrLoc = gl.getAttribLocation(Renderer.mainProgram.program, 'a_packed');
 
         const vertexArray: WebGLVertexArrayObject = gl.createVertexArray()!;
         gl.bindVertexArray(vertexArray);
-        gl.enableVertexAttribArray(Renderer.positionAttrLoc);
-        gl.enableVertexAttribArray(Renderer.texCoordAttrLoc);
+        gl.enableVertexAttribArray(Renderer.packedAttrLoc);
         Renderer.vertexArray = vertexArray;
         gl.bindVertexArray(null);
     }
@@ -810,8 +865,10 @@ export class Renderer {
             gl.bindBuffer(gl.ARRAY_BUFFER, Renderer.vertexBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, vertexDataBuffer.data, gl.STATIC_DRAW, 0, vertexDataBuffer.pos);
 
-            gl.vertexAttribPointer(Renderer.positionAttrLoc, 4, gl.FLOAT, false, VertexDataBuffer.STRIDE, 0);
-            gl.vertexAttribPointer(Renderer.texCoordAttrLoc, 4, gl.FLOAT, false, VertexDataBuffer.STRIDE, 4 * 4);
+            // console.log("Uploading", vertexCount, "vertices and", elementCount, "elements");
+
+            gl.vertexAttribIPointer(Renderer.packedAttrLoc, 3, gl.UNSIGNED_INT, VertexDataBuffer.STRIDE, 0);
+            // gl.vertexAttribPointer(Renderer.packedAttrLoc, 3, gl.UNSIGNED_INT, false, 0, 0);
 
             Renderer.indexBuffer = gl.createBuffer()!;
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, Renderer.indexBuffer);
@@ -1009,45 +1066,52 @@ export class Renderer {
             for (let x: number = 0; x < world.maxTileX; x++) {
                 for (let z: number = 0; z < world.maxTileZ; z++) {
                     const tile: Tile | null = world.levelTiles[level][x][z];
-                    if (!tile) {
-                        continue;
-                    }
-                    const wallModelA: Model | null | undefined = tile.wall?.modelA;
-                    const wallModelB: Model | null | undefined = tile.wall?.modelB;
-                    const wallDecModel: Model | null | undefined = tile.wallDecoration?.model;
-                    const groundDecModel: Model | null | undefined = tile.groundDecoration?.model;
-                    if (wallModelA) {
-                        Renderer.modelsToCache.add(wallModelA);
-                        // Renderer.cacheModelVertexData(wallModelA);
-                    }
-                    if (wallModelB) {
-                        Renderer.modelsToCache.add(wallModelB);
-                        // Renderer.cacheModelVertexData(wallModelB);
-                    }
-                    if (wallDecModel) {
-                        Renderer.modelsToCache.add(wallDecModel);
-                        // Renderer.cacheModelVertexData(wallDecModel);
-                    }
-                    if (groundDecModel) {
-                        Renderer.modelsToCache.add(groundDecModel);
-                        // Renderer.cacheModelVertexData(groundDecModel);
-                    }
-                    for (const loc of tile.locs) {
-                        if (!loc) {
-                            continue;
-                        }
-                        const model: Model | null = loc.model;
-                        if (!model) {
-                            continue;
-                        }
-                        Renderer.modelsToCache.add(model);
-                        // Renderer.cacheModelVertexData(model);
-                    }
+                    Renderer.cacheTile(tile);
                 }
             }
         }
 
         // console.log("Caching", Renderer.modelsToCache.size, "models");
+    }
+
+    static cacheTile(tile: Tile | null): void {
+        if (!tile) {
+            return;
+        }
+        if (tile.bridge) {
+            Renderer.cacheTile(tile.bridge);
+        }
+        const wallModelA: Model | null | undefined = tile.wall?.modelA;
+        const wallModelB: Model | null | undefined = tile.wall?.modelB;
+        const wallDecModel: Model | null | undefined = tile.wallDecoration?.model;
+        const groundDecModel: Model | null | undefined = tile.groundDecoration?.model;
+        if (wallModelA) {
+            Renderer.modelsToCache.add(wallModelA);
+            // Renderer.cacheModelVertexData(wallModelA);
+        }
+        if (wallModelB) {
+            Renderer.modelsToCache.add(wallModelB);
+            // Renderer.cacheModelVertexData(wallModelB);
+        }
+        if (wallDecModel) {
+            Renderer.modelsToCache.add(wallDecModel);
+            // Renderer.cacheModelVertexData(wallDecModel);
+        }
+        if (groundDecModel) {
+            Renderer.modelsToCache.add(groundDecModel);
+            // Renderer.cacheModelVertexData(groundDecModel);
+        }
+        for (const loc of tile.locs) {
+            if (!loc) {
+                continue;
+            }
+            const model: Model | null = loc.model;
+            if (!model) {
+                continue;
+            }
+            Renderer.modelsToCache.add(model);
+            // Renderer.cacheModelVertexData(model);
+        }
     }
 
     static onSceneReset(world: World3D): void {
@@ -1249,6 +1313,10 @@ export class Renderer {
         if (!Renderer.enabled || !Renderer.isDrawingScene) {
             return false;
         }
+
+        // if (Renderer.modelsToCache.has(model)) {
+        //     return true;
+        // }
 
         const startIndex: number = Renderer.modelStartIndex + index * 3;
 
