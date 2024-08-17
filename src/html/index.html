@@ -36,6 +36,30 @@
     </head>
     <body>
         <canvas id="canvas" width="789" height="532"></canvas>
-        <canvas id="canvas-webgpu" width="789" height="532"></canvas>
+        <div style="width: 789px; height: 400px; margin: 0 auto;">
+            <canvas id="canvas-webgpu" width="512" height="334" style="margin: 11px 0 0 8px;"></canvas>
+        </div>
+        <script>
+            const canvas = document.getElementById('canvas');
+            let isDown = false;
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'h' || e.key === 'H') {
+                    e.preventDefault();
+                    if (!isDown) {
+                        canvas.style.display = canvas.style.display === 'none' ? 'block' : 'none';
+                    }
+                    isDown = true;
+                }
+            });
+            document.addEventListener('keyup', function(e) {
+                if (e.key === 'h' || e.key === 'H') {
+                    e.preventDefault();
+                    if (isDown) {
+                        canvas.style.display = canvas.style.display === 'none' ? 'block' : 'none';
+                    }
+                    isDown = false;
+                }
+            });
+        </script>
     </body>
 </html>

@@ -24,8 +24,8 @@ fn clear(@builtin(global_invocation_id) global_id: vec3u) {
   atomicStore(&depthBuffer[index], 0);
 }
 
-const width = 789;
-const height = 532;
+const width = 512;
+const height = 334;
 
 // const centerX = width / 2;
 // const centerY = height / 2;
