@@ -4,14 +4,19 @@ import {SHADER_CODE as fullscreenPixelsShaderCode} from './fullscreen-pixels.wgs
 
 const MAX_CALLS: number = 2560;
 
+const TEXTURE_COUNT: number = 50;
+
 const TEXTURE_SIZE: number = 128;
 const TEXTURE_PIXEL_COUNT: number = TEXTURE_SIZE * TEXTURE_SIZE;
+
+const PALETTE_BYTES: number = 65536 * 4;
+const TEXTURES_TRANSLUCENT_BYTES: number = TEXTURE_COUNT * 4;
+const TEXTURES_BYTES: number = TEXTURE_COUNT * TEXTURE_PIXEL_COUNT * 4 * 4;
 
 export class Renderer {
     static device: GPUDevice | undefined;
 
-    static paletteBuffer: GPUBuffer;
-    static texturesBuffer: GPUBuffer;
+    static lutsBuffer: GPUBuffer;
 
     static callsBuffer: GPUBuffer | undefined;
 
@@ -55,19 +60,11 @@ export class Renderer {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
 
-        const paletteBuffer: GPUBuffer = device.createBuffer({
-            size: Draw3D.palette.length * 4,
+        const lutsBuffer: GPUBuffer = device.createBuffer({
+            size: PALETTE_BYTES + TEXTURES_TRANSLUCENT_BYTES + TEXTURES_BYTES,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
-        Renderer.paletteBuffer = paletteBuffer;
-
-        const textureCount: number = Draw3D.textures.length;
-
-        const texturesBuffer: GPUBuffer = device.createBuffer({
-            size: textureCount * TEXTURE_PIXEL_COUNT * 4 * 4,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        });
-        Renderer.texturesBuffer = texturesBuffer;
+        Renderer.lutsBuffer = lutsBuffer;
 
         Renderer.updateBrightness();
 
@@ -85,11 +82,6 @@ export class Renderer {
                 },
                 {
                     binding: 1,
-                    visibility: GPUShaderStage.COMPUTE,
-                    buffer: {type: 'read-only-storage'}
-                },
-                {
-                    binding: 2,
                     visibility: GPUShaderStage.COMPUTE,
                     buffer: {type: 'read-only-storage'}
                 }
@@ -118,13 +110,7 @@ export class Renderer {
                 {
                     binding: 1,
                     resource: {
-                        buffer: paletteBuffer
-                    }
-                },
-                {
-                    binding: 2,
-                    resource: {
-                        buffer: texturesBuffer
+                        buffer: lutsBuffer
                     }
                 }
             ]
@@ -291,17 +277,25 @@ export class Renderer {
         }
 
         // Update palette
-        device.queue.writeBuffer(Renderer.paletteBuffer, 0, new Uint32Array(Draw3D.palette));
+        device.queue.writeBuffer(Renderer.lutsBuffer, 0, new Uint32Array(Draw3D.palette));
 
         Renderer.updateTextures();
     }
 
     static updateTextures(): void {
-        const textureCount: number = Draw3D.textures.length;
+        const device: GPUDevice | undefined = Renderer.device;
+        if (!device) {
+            return;
+        }
 
-        for (let i: number = 0; i < textureCount; i++) {
+        for (let i: number = 0; i < TEXTURE_COUNT; i++) {
             Renderer.updateTexture(i);
         }
+        const texturesTranslucentData: Uint32Array = new Uint32Array(TEXTURES_TRANSLUCENT_BYTES);
+        for (let i: number = 0; i < TEXTURE_COUNT; i++) {
+            texturesTranslucentData[i] = Draw3D.textureTranslucent[i] ? 1 : 0;
+        }
+        device.queue.writeBuffer(Renderer.lutsBuffer, PALETTE_BYTES, texturesTranslucentData);
     }
 
     static updateTexture(id: number): void {
@@ -310,12 +304,11 @@ export class Renderer {
             return;
         }
 
-        const texturesBuffer: GPUBuffer = Renderer.texturesBuffer;
         const texels: Int32Array | null = Draw3D.getTexels(id);
         if (!texels) {
             return;
         }
-        device.queue.writeBuffer(texturesBuffer, id * TEXTURE_PIXEL_COUNT * 4 * 4, new Uint32Array(texels));
+        device.queue.writeBuffer(Renderer.lutsBuffer, PALETTE_BYTES + TEXTURES_TRANSLUCENT_BYTES + id * TEXTURE_PIXEL_COUNT * 4 * 4, new Uint32Array(texels));
     }
 
     static setBrightness(brightness: number): void {

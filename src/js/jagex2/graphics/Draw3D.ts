@@ -33,7 +33,7 @@ export default class Draw3D extends Draw2D {
     static texturePalette: (Int32Array | null)[] = new TypedArray1d(50, null);
 
     private static opaque: boolean = false;
-    private static textureTranslucent: boolean[] = new TypedArray1d(50, false);
+    static textureTranslucent: boolean[] = new TypedArray1d(50, false);
     private static averageTextureRGB: Int32Array = new Int32Array(50);
 
     static {

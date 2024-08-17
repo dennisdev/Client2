@@ -3,9 +3,17 @@ struct PixelBuffer {
   data: array<i32>,
 };
 
+const textureCount = 50;
+
+// Look-up tables
+struct LUTs {
+  palette: array<i32, 65536>,
+  texturesTranslucent: array<i32, textureCount>,
+  textures: array<array<i32, 65536>, textureCount>,
+};
+
 @group(0) @binding(0) var<storage, read_write> pixelBuffer: PixelBuffer;
-@group(0) @binding(1) var<storage, read> palette: array<i32>;
-@group(0) @binding(2) var<storage, read> textures: array<array<i32, 65536>>;
+@group(0) @binding(1) var<storage, read> luts: LUTs;
 @group(1) @binding(0) var<storage, read> calls: array<i32>;
 
 @compute @workgroup_size(256, 1)
@@ -48,36 +56,6 @@ fn render(@builtin(global_invocation_id) global_id: vec3u) {
     calls[offset + 15], calls[offset + 16], calls[offset + 17],
     calls[offset + 18]
   );
-
-//   pixelBuffer.data[0x1337] = 0xff00ff;
-
-//   rasterScanline(10, 100, 0, 0xff00ff);
-  // rasterTriangle(10, 150, 400, 250, 10, 250, 0xff00ff);
-  // rasterGouraudTriangle(10, 150, 400, 250, 10, 250, 127, 0, 0);
-  // rasterTexturedTriangle(390, 344, 383, 171, 202, 230, 0, 22, 0, 360, 251, 1961, 488, 349, 242, 139, 1966, 2021, 1);
-
-//   let calls = array(
-//   array(276, 284, 284, 107, 135, 133, 3, 23, 20, 82, -239, 2031, 82, 111, -288, -123, 1913, 1983, 46),
-// // array(274, 273, 282, 85, 94, 121, 72, 103, 103, 95, -169, 1864, 95, 66, -218, -278, 1745, 1926, 46),
-// // array(282, 274, 282, 113, 85, 121, 72, 72, 103, 95, -169, 1864, 95, 66, -218, -278, 1745, 1926, 46),
-// // array(282, 289, 311, 157, 184, 151, 63, 63, 45, 265, 45, 2138, 236, 140, -70, 72, 2186, 2127, 1),
-// // array(319, 311, 289, 177, 151, 184, 45, 45, 63, 265, 45, 2138, 236, 140, -70, 72, 2186, 2127, 1),
-// // array(319, 328, 348, 177, 206, 171, 45, 45, 43, 419, 133, 2101, 390, 294, 18, 160, 2150, 2090, 1),
-// // array(358, 348, 328, 199, 171, 206, 43, 43, 45, 419, 133, 2101, 390, 294, 18, 160, 2150, 2090, 1),
-// // array(358, 367, 387, 199, 228, 192, 43, 43, 43, 573, 221, 2065, 543, 448, 106, 248, 2113, 2054, 1),
-// // array(398, 387, 367, 221, 192, 228, 43, 43, 43, 573, 221, 2065, 543, 448, 106, 248, 2113, 2054, 1),
-// // array(427, 398, 403, 214, 221, 236, 43, 43, 61, 726, 309, 2028, 697, 602, 194, 336, 2076, 2017, 1),
-// // array(218, 212, 185, 143, 118, 136, 66, 22, 24, -167, -104, 2201, -197, -292, -219, -77, 2249, 2189, 1),
-// // array(218, 185, 188, 143, 136, 149, 66, 24, 48, -167, -104, 2201, -197, -292, -219, -77, 2249, 2189, 1),
-// // array(218, 224, 247, 143, 169, 137, 66, 66, 68, -14, -16, 2164, -43, -138, -132, 10, 2212, 2153, 1),
-//   );
-
-
-
-  // for (var i = 0; i < 1; i++) {
-  //   let call = calls[i];
-  //   rasterTexturedTriangle(call[0], call[1], call[2], call[3], call[4], call[5], call[6], call[7], call[8], call[9], call[10], call[11], call[12], call[13], call[14], call[15], call[16], call[17], call[18]);
-  // }
 }
 
 fn rasterTriangle(x0In: i32, x1In: i32, x2In: i32, y0In: i32, y1In: i32, y2In: i32, color: i32) {
@@ -1058,7 +1036,7 @@ fn rasterGouraudScanline(x0In: i32, x1In: i32, color0In: i32, color1: i32, offse
         if (length < 0) {
           length = (x1 - x0) & 0x3;
           if (length > 0) {
-            rgb = palette[color0 >> 8];
+            rgb = luts.palette[color0 >> 8];
             while (true) {
               pixelBuffer.data[offset] = rgb;
               offset++;
@@ -1071,7 +1049,7 @@ fn rasterGouraudScanline(x0In: i32, x1In: i32, color0In: i32, color1: i32, offse
           }
           break;
         }
-        rgb = palette[color0 >> 8];
+        rgb = luts.palette[color0 >> 8];
         color0 += colorStep;
         pixelBuffer.data[offset] = rgb;
         offset++;
@@ -1132,7 +1110,6 @@ fn rasterTexturedTriangle(
   tzCIn: i32,
   textureId: i32
 ) {
-  clipX = xAIn < 0 || xBIn < 0 || xCIn < 0 || xAIn > boundX || xBIn > boundX || xCIn > boundX;
   var xA = xAIn;
   var xB = xBIn;
   var xC = xCIn;
@@ -1151,7 +1128,9 @@ fn rasterTexturedTriangle(
   var tyC = tyCIn;
   var tzB = tzBIn;
   var tzC = tzCIn;
-  let texels = &textures[textureId];
+  let texels = &luts.textures[textureId];
+  opaqueTexture = luts.texturesTranslucent[textureId] == 0;
+  clipX = xA < 0 || xB < 0 || xC < 0 || xA > boundX || xB > boundX || xC > boundX;
 
   let verticalX = originX - txB;
   let verticalY = originY - tyB;
@@ -1912,7 +1891,94 @@ fn rasterTexturedScanline(
       curV += stepV;
     }
   } else {
-
+    while (strides > 0) {
+      strides--;
+      var rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset = offset + 1;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+      rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU = nextU;
+      curV = nextV;
+      u += uStride;
+      v += vStride;
+      w += wStride;
+      curW = w >> 14;
+      if (curW != 0) {
+        nextU = (u / curW);
+        nextV = (v / curW);
+        if (nextU < 7) {
+          nextU = 7;
+        } else if (nextU > 16256) {
+          nextU = 16256;
+        }
+      }
+      stepU = (nextU - curU) >> 3;
+      stepV = (nextV - curV) >> 3;
+      shadeA += shadeStrides;
+      curU += shadeA & 0x600000;
+      shadeShift = u32(shadeA >> 23);
+    }
+    strides = (xB - xA) & 0x7;
+    while (strides > 0) {
+      strides--;
+      var rgb = texels[(curV & 0x3f80) + (curU >> 7)] >> shadeShift;
+      if (rgb != 0) {
+        pixelBuffer.data[offset] = rgb;
+      }
+      offset++;
+      curU += stepU;
+      curV += stepV;
+    }
   }
 }
 
