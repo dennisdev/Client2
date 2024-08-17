@@ -23,10 +23,10 @@ export class Renderer {
 
     static triangleCount: number = 0;
 
-    static texturedTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 19);
+    static texturedTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 20);
     static texturedTriangleCount: number = 0;
 
-    static gouraudTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 9);
+    static gouraudTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 10);
     static gouraudTriangleCount: number = 0;
 
     static frameCount: number = 0;
@@ -65,6 +65,10 @@ export class Renderer {
             size: canvas.width * canvas.height * 4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
+        const depthBuffer: GPUBuffer = device.createBuffer({
+            size: canvas.width * canvas.height * 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
 
         const lutsBuffer: GPUBuffer = device.createBuffer({
             size: PALETTE_BYTES + TEXTURES_TRANSLUCENT_BYTES + TEXTURES_BYTES,
@@ -88,6 +92,11 @@ export class Renderer {
                 },
                 {
                     binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {type: 'storage'}
+                },
+                {
+                    binding: 2,
                     visibility: GPUShaderStage.COMPUTE,
                     buffer: {type: 'read-only-storage'}
                 }
@@ -116,6 +125,12 @@ export class Renderer {
                 {
                     binding: 1,
                     resource: {
+                        buffer: depthBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
                         buffer: lutsBuffer
                     }
                 }
@@ -131,8 +146,27 @@ export class Renderer {
             }
         });
 
+        // depth
+        const renderTexturedDepthPipeline: GPUComputePipeline = device.createComputePipeline({
+            label: 'render textured depth pipeline',
+            layout: device.createPipelineLayout({bindGroupLayouts: [rasterizerBindGroupLayout, triangleDataBindGroupLayout]}),
+            compute: {
+                module: rasterizerShaderModule,
+                entryPoint: 'renderDepth'
+            }
+        });
+        const renderGouraudDepthPipeline: GPUComputePipeline = device.createComputePipeline({
+            label: 'render gouraud depth pipeline',
+            layout: device.createPipelineLayout({bindGroupLayouts: [rasterizerBindGroupLayout, triangleDataBindGroupLayout]}),
+            compute: {
+                module: rasterizerShaderModule,
+                entryPoint: 'renderGouraudDepth'
+            }
+        });
+
+        // color
         const renderTexturedPipeline: GPUComputePipeline = device.createComputePipeline({
-            label: 'compute render pipeline',
+            label: 'render textured pipeline',
             layout: device.createPipelineLayout({bindGroupLayouts: [rasterizerBindGroupLayout, triangleDataBindGroupLayout]}),
             compute: {
                 module: rasterizerShaderModule,
@@ -140,7 +174,7 @@ export class Renderer {
             }
         });
         const renderGouraudPipeline: GPUComputePipeline = device.createComputePipeline({
-            label: 'compute render pipeline',
+            label: 'render gouraud pipeline',
             layout: device.createPipelineLayout({bindGroupLayouts: [rasterizerBindGroupLayout, triangleDataBindGroupLayout]}),
             compute: {
                 module: rasterizerShaderModule,
@@ -222,6 +256,50 @@ export class Renderer {
                 Renderer.gouraudTriangleDataBuffer = undefined;
             }
 
+            let texturedTriangleDataBindGroup: GPUBindGroup | undefined;
+            if (Renderer.texturedTriangleCount > 0) {
+                texturedTriangleDataBuffer = device.createBuffer({
+                    size: Renderer.texturedTriangleCount * 20 * 4,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+                Renderer.texturedTriangleDataBuffer = texturedTriangleDataBuffer;
+                device.queue.writeBuffer(texturedTriangleDataBuffer, 0, Renderer.texturedTriangleData.subarray(0, Renderer.texturedTriangleCount * 20));
+
+                texturedTriangleDataBindGroup = device.createBindGroup({
+                    layout: triangleDataBindGroupLayout,
+                    entries: [
+                        {
+                            binding: 0,
+                            resource: {
+                                buffer: texturedTriangleDataBuffer
+                            }
+                        }
+                    ]
+                });
+            }
+
+            let gouraudTriangleDataBindGroup: GPUBindGroup | undefined;
+            if (Renderer.gouraudTriangleCount > 0) {
+                gouraudTriangleDataBuffer = device.createBuffer({
+                    size: Renderer.gouraudTriangleCount * 10 * 4,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+                Renderer.gouraudTriangleDataBuffer = gouraudTriangleDataBuffer;
+                device.queue.writeBuffer(gouraudTriangleDataBuffer, 0, Renderer.gouraudTriangleData.subarray(0, Renderer.gouraudTriangleCount * 10));
+
+                gouraudTriangleDataBindGroup = device.createBindGroup({
+                    layout: triangleDataBindGroupLayout,
+                    entries: [
+                        {
+                            binding: 0,
+                            resource: {
+                                buffer: gouraudTriangleDataBuffer
+                            }
+                        }
+                    ]
+                });
+            }
+
             const encoder: GPUCommandEncoder = device.createCommandEncoder({
                 label: 'render command encoder'
             });
@@ -233,57 +311,31 @@ export class Renderer {
             // computePass.setBindGroup(1, callsBindGroup);
             computePass.dispatchWorkgroups(Math.ceil((canvas.width * canvas.height) / 256));
 
-            if (Renderer.texturedTriangleCount > 0) {
-                texturedTriangleDataBuffer = device.createBuffer({
-                    size: Renderer.texturedTriangleCount * 19 * 4,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-                });
-                Renderer.texturedTriangleDataBuffer = texturedTriangleDataBuffer;
-                device.queue.writeBuffer(texturedTriangleDataBuffer, 0, Renderer.texturedTriangleData.subarray(0, Renderer.texturedTriangleCount * 19));
-
-                const triangleDataBindGroup: GPUBindGroup = device.createBindGroup({
-                    layout: triangleDataBindGroupLayout,
-                    entries: [
-                        {
-                            binding: 0,
-                            resource: {
-                                buffer: texturedTriangleDataBuffer
-                            }
-                        }
-                    ]
-                });
-
-                computePass.setPipeline(renderTexturedPipeline);
+            // render depth
+            if (Renderer.texturedTriangleCount > 0 && texturedTriangleDataBindGroup) {
+                computePass.setPipeline(renderTexturedDepthPipeline);
                 computePass.setBindGroup(0, rasterizerBindGroup);
-                computePass.setBindGroup(1, triangleDataBindGroup);
-                // computePass.dispatchWorkgroups(1);
+                computePass.setBindGroup(1, texturedTriangleDataBindGroup);
                 computePass.dispatchWorkgroups(Renderer.texturedTriangleCount);
             }
+            if (Renderer.gouraudTriangleCount > 0 && gouraudTriangleDataBindGroup) {
+                computePass.setPipeline(renderGouraudDepthPipeline);
+                computePass.setBindGroup(0, rasterizerBindGroup);
+                computePass.setBindGroup(1, gouraudTriangleDataBindGroup);
+                computePass.dispatchWorkgroups(Renderer.gouraudTriangleCount);
+            }
 
-            if (Renderer.gouraudTriangleCount > 0) {
-                gouraudTriangleDataBuffer = device.createBuffer({
-                    size: Renderer.gouraudTriangleCount * 9 * 4,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-                });
-                Renderer.gouraudTriangleDataBuffer = gouraudTriangleDataBuffer;
-                device.queue.writeBuffer(gouraudTriangleDataBuffer, 0, Renderer.gouraudTriangleData.subarray(0, Renderer.gouraudTriangleCount * 9));
-
-                const triangleDataBindGroup: GPUBindGroup = device.createBindGroup({
-                    layout: triangleDataBindGroupLayout,
-                    entries: [
-                        {
-                            binding: 0,
-                            resource: {
-                                buffer: gouraudTriangleDataBuffer
-                            }
-                        }
-                    ]
-                });
-
+            // render color
+            if (Renderer.texturedTriangleCount > 0 && texturedTriangleDataBindGroup) {
+                computePass.setPipeline(renderTexturedPipeline);
+                computePass.setBindGroup(0, rasterizerBindGroup);
+                computePass.setBindGroup(1, texturedTriangleDataBindGroup);
+                computePass.dispatchWorkgroups(Renderer.texturedTriangleCount);
+            }
+            if (Renderer.gouraudTriangleCount > 0 && gouraudTriangleDataBindGroup) {
                 computePass.setPipeline(renderGouraudPipeline);
                 computePass.setBindGroup(0, rasterizerBindGroup);
-                computePass.setBindGroup(1, triangleDataBindGroup);
-                // computePass.dispatchWorkgroups(1);
+                computePass.setBindGroup(1, gouraudTriangleDataBindGroup);
                 computePass.dispatchWorkgroups(Renderer.gouraudTriangleCount);
             }
 
@@ -373,17 +425,20 @@ export class Renderer {
         if (Renderer.gouraudTriangleCount >= MAX_TRIANGLES) {
             return;
         }
-        const offset: number = Renderer.gouraudTriangleCount * 9;
+        let offset: number = Renderer.gouraudTriangleCount * 10;
 
-        Renderer.gouraudTriangleData[offset] = xA;
-        Renderer.gouraudTriangleData[offset + 1] = xB;
-        Renderer.gouraudTriangleData[offset + 2] = xC;
-        Renderer.gouraudTriangleData[offset + 3] = yA;
-        Renderer.gouraudTriangleData[offset + 4] = yB;
-        Renderer.gouraudTriangleData[offset + 5] = yC;
-        Renderer.gouraudTriangleData[offset + 6] = colorA;
-        Renderer.gouraudTriangleData[offset + 7] = colorB;
-        Renderer.gouraudTriangleData[offset + 8] = colorC;
+        const triangleIndex: number = Renderer.triangleCount++;
+
+        Renderer.gouraudTriangleData[offset++] = triangleIndex;
+        Renderer.gouraudTriangleData[offset++] = xA;
+        Renderer.gouraudTriangleData[offset++] = xB;
+        Renderer.gouraudTriangleData[offset++] = xC;
+        Renderer.gouraudTriangleData[offset++] = yA;
+        Renderer.gouraudTriangleData[offset++] = yB;
+        Renderer.gouraudTriangleData[offset++] = yC;
+        Renderer.gouraudTriangleData[offset++] = colorA;
+        Renderer.gouraudTriangleData[offset++] = colorB;
+        Renderer.gouraudTriangleData[offset++] = colorC;
 
         Renderer.gouraudTriangleCount++;
     };
@@ -412,27 +467,30 @@ export class Renderer {
         if (Renderer.texturedTriangleCount >= MAX_TRIANGLES) {
             return;
         }
-        const offset: number = Renderer.texturedTriangleCount * 19;
+        let offset: number = Renderer.texturedTriangleCount * 20;
 
-        Renderer.texturedTriangleData[offset] = xA;
-        Renderer.texturedTriangleData[offset + 1] = xB;
-        Renderer.texturedTriangleData[offset + 2] = xC;
-        Renderer.texturedTriangleData[offset + 3] = yA;
-        Renderer.texturedTriangleData[offset + 4] = yB;
-        Renderer.texturedTriangleData[offset + 5] = yC;
-        Renderer.texturedTriangleData[offset + 6] = shadeA;
-        Renderer.texturedTriangleData[offset + 7] = shadeB;
-        Renderer.texturedTriangleData[offset + 8] = shadeC;
-        Renderer.texturedTriangleData[offset + 9] = originX;
-        Renderer.texturedTriangleData[offset + 10] = originY;
-        Renderer.texturedTriangleData[offset + 11] = originZ;
-        Renderer.texturedTriangleData[offset + 12] = txB;
-        Renderer.texturedTriangleData[offset + 13] = txC;
-        Renderer.texturedTriangleData[offset + 14] = tyB;
-        Renderer.texturedTriangleData[offset + 15] = tyC;
-        Renderer.texturedTriangleData[offset + 16] = tzB;
-        Renderer.texturedTriangleData[offset + 17] = tzC;
-        Renderer.texturedTriangleData[offset + 18] = texture;
+        const triangleIndex: number = Renderer.triangleCount++;
+
+        Renderer.texturedTriangleData[offset++] = triangleIndex;
+        Renderer.texturedTriangleData[offset++] = xA;
+        Renderer.texturedTriangleData[offset++] = xB;
+        Renderer.texturedTriangleData[offset++] = xC;
+        Renderer.texturedTriangleData[offset++] = yA;
+        Renderer.texturedTriangleData[offset++] = yB;
+        Renderer.texturedTriangleData[offset++] = yC;
+        Renderer.texturedTriangleData[offset++] = shadeA;
+        Renderer.texturedTriangleData[offset++] = shadeB;
+        Renderer.texturedTriangleData[offset++] = shadeC;
+        Renderer.texturedTriangleData[offset++] = originX;
+        Renderer.texturedTriangleData[offset++] = originY;
+        Renderer.texturedTriangleData[offset++] = originZ;
+        Renderer.texturedTriangleData[offset++] = txB;
+        Renderer.texturedTriangleData[offset++] = txC;
+        Renderer.texturedTriangleData[offset++] = tyB;
+        Renderer.texturedTriangleData[offset++] = tyC;
+        Renderer.texturedTriangleData[offset++] = tzB;
+        Renderer.texturedTriangleData[offset++] = tzC;
+        Renderer.texturedTriangleData[offset++] = texture;
 
         Renderer.texturedTriangleCount++;
     };
