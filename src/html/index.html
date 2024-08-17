@@ -49,6 +49,7 @@
                         canvas.style.display = canvas.style.display === 'none' ? 'block' : 'none';
                     }
                     isDown = true;
+                    canvas.focus();
                 }
             });
             document.addEventListener('keyup', function(e) {
@@ -58,6 +59,7 @@
                         canvas.style.display = canvas.style.display === 'none' ? 'block' : 'none';
                     }
                     isDown = false;
+                    canvas.focus();
                 }
             });
         </script>

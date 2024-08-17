@@ -888,6 +888,8 @@ export default class Draw3D extends Draw2D {
     };
 
     static fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): void => {
+        Renderer.fillTriangle(x0, x1, x2, y0, y1, y2, color);
+
         let xStepAB: number = 0;
         if (y1 !== y0) {
             xStepAB = (((x1 - x0) << 16) / (y1 - y0)) | 0;

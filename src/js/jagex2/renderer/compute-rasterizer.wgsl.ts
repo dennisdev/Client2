@@ -27,10 +27,10 @@ fn clear(@builtin(global_invocation_id) global_id: vec3u) {
 const width = 512;
 const height = 334;
 
-// const centerX = width / 2;
-// const centerY = height / 2;
-const centerX = 256;
-const centerY = 167;
+const centerX = width / 2;
+const centerY = height / 2;
+// const centerX = 256;
+// const centerY = 167;
 
 var<private> jagged = true;
 var<private> clipX = false;
@@ -39,26 +39,34 @@ var<private> alpha = 0;
 var<private> opaqueTexture = true;
 
 const boundRight = width;
-// const boundBottom = height;
-const boundBottom = 334;
-// const boundX = width - 1;
-const boundX = 512 - 1;
+const boundBottom = height;
+// const boundBottom = 334;
+const boundX = width - 1;
+// const boundX = 512 - 1;
 
 var<private> depth = 0;
 var<private> writeDepth = false;
 
 @compute @workgroup_size(1, 1)
-fn render(@builtin(global_invocation_id) global_id: vec3u) {
-  let offset = global_id.x * 20;
+fn renderFlat(@builtin(global_invocation_id) global_id: vec3u) {
+  let offset = global_id.x * 8;
   depth = calls[offset];
-  rasterTexturedTriangle(
+  rasterTriangle(
     calls[offset + 1], calls[offset + 2], calls[offset + 3],
     calls[offset + 4], calls[offset + 5], calls[offset + 6],
-    calls[offset + 7], calls[offset + 8], calls[offset + 9],
-    calls[offset + 10], calls[offset + 11], calls[offset + 12],
-    calls[offset + 13], calls[offset + 14], calls[offset + 15],
-    calls[offset + 16], calls[offset + 17], calls[offset + 18],
-    calls[offset + 19]
+    calls[offset + 7],
+  );
+}
+
+@compute @workgroup_size(1, 1)
+fn renderFlatDepth(@builtin(global_invocation_id) global_id: vec3u) {
+  let offset = global_id.x * 8;
+  depth = calls[offset];
+  writeDepth = true;
+  rasterTriangle(
+    calls[offset + 1], calls[offset + 2], calls[offset + 3],
+    calls[offset + 4], calls[offset + 5], calls[offset + 6],
+    0,
   );
 }
 
@@ -69,33 +77,8 @@ fn renderGouraud(@builtin(global_invocation_id) global_id: vec3u) {
   rasterGouraudTriangle(
     calls[offset + 1], calls[offset + 2], calls[offset + 3],
     calls[offset + 4], calls[offset + 5], calls[offset + 6],
-    calls[offset + 7], calls[offset + 8], calls[offset + 9]
+    calls[offset + 7], calls[offset + 8], calls[offset + 9],
   );
-}
-
-@compute @workgroup_size(1, 1)
-fn renderDepth(@builtin(global_invocation_id) global_id: vec3u) {
-  let offset = global_id.x * 20;
-  depth = calls[offset];
-  writeDepth = true;
-  opaqueTexture = luts.texturesTranslucent[calls[offset + 19]] == 0;
-  if (opaqueTexture) {
-    rasterTriangle(
-      calls[offset + 1], calls[offset + 2], calls[offset + 3],
-      calls[offset + 4], calls[offset + 5], calls[offset + 6],
-      depth,
-    );
-  } else {
-    rasterTexturedTriangle(
-      calls[offset + 1], calls[offset + 2], calls[offset + 3],
-      calls[offset + 4], calls[offset + 5], calls[offset + 6],
-      calls[offset + 7], calls[offset + 8], calls[offset + 9],
-      calls[offset + 10], calls[offset + 11], calls[offset + 12],
-      calls[offset + 13], calls[offset + 14], calls[offset + 15],
-      calls[offset + 16], calls[offset + 17], calls[offset + 18],
-      calls[offset + 19]
-    );
-  }
 }
 
 @compute @workgroup_size(1, 1)
@@ -106,8 +89,48 @@ fn renderGouraudDepth(@builtin(global_invocation_id) global_id: vec3u) {
   rasterTriangle(
     calls[offset + 1], calls[offset + 2], calls[offset + 3],
     calls[offset + 4], calls[offset + 5], calls[offset + 6],
-    depth,
+    0,
   );
+}
+
+@compute @workgroup_size(1, 1)
+fn renderTextured(@builtin(global_invocation_id) global_id: vec3u) {
+  let offset = global_id.x * 20;
+  depth = calls[offset];
+  rasterTexturedTriangle(
+    calls[offset + 1], calls[offset + 2], calls[offset + 3],
+    calls[offset + 4], calls[offset + 5], calls[offset + 6],
+    calls[offset + 7], calls[offset + 8], calls[offset + 9],
+    calls[offset + 10], calls[offset + 11], calls[offset + 12],
+    calls[offset + 13], calls[offset + 14], calls[offset + 15],
+    calls[offset + 16], calls[offset + 17], calls[offset + 18],
+    calls[offset + 19],
+  );
+}
+
+@compute @workgroup_size(1, 1)
+fn renderTexturedDepth(@builtin(global_invocation_id) global_id: vec3u) {
+  let offset = global_id.x * 20;
+  depth = calls[offset];
+  writeDepth = true;
+  opaqueTexture = luts.texturesTranslucent[calls[offset + 19]] == 0;
+  if (opaqueTexture) {
+    rasterTriangle(
+      calls[offset + 1], calls[offset + 2], calls[offset + 3],
+      calls[offset + 4], calls[offset + 5], calls[offset + 6],
+      0,
+    );
+  } else {
+    rasterTexturedTriangle(
+      calls[offset + 1], calls[offset + 2], calls[offset + 3],
+      calls[offset + 4], calls[offset + 5], calls[offset + 6],
+      calls[offset + 7], calls[offset + 8], calls[offset + 9],
+      calls[offset + 10], calls[offset + 11], calls[offset + 12],
+      calls[offset + 13], calls[offset + 14], calls[offset + 15],
+      calls[offset + 16], calls[offset + 17], calls[offset + 18],
+      calls[offset + 19],
+    );
+  }
 }
 
 fn setPixel(index: i32, value: i32) {
