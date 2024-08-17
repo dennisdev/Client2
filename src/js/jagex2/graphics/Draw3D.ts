@@ -263,6 +263,8 @@ export default class Draw3D extends Draw2D {
     };
 
     static fillGouraudTriangle = (xA: number, xB: number, xC: number, yA: number, yB: number, yC: number, colorA: number, colorB: number, colorC: number): void => {
+        Renderer.fillGouraudTriangle(xA, xB, xC, yA, yB, yC, colorA, colorB, colorC);
+
         let xStepAB: number = 0;
         let colorStepAB: number = 0;
         if (yB !== yA) {

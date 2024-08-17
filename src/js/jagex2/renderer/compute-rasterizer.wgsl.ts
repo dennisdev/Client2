@@ -58,6 +58,16 @@ fn render(@builtin(global_invocation_id) global_id: vec3u) {
   );
 }
 
+@compute @workgroup_size(1, 1)
+fn renderGouraud(@builtin(global_invocation_id) global_id: vec3u) {
+  let offset = global_id.x * 9;
+  rasterGouraudTriangle(
+    calls[offset + 0], calls[offset + 1], calls[offset + 2],
+    calls[offset + 3], calls[offset + 4], calls[offset + 5],
+    calls[offset + 6], calls[offset + 7], calls[offset + 8]
+  );
+}
+
 fn rasterTriangle(x0In: i32, x1In: i32, x2In: i32, y0In: i32, y1In: i32, y2In: i32, color: i32) {
   var x0 = x0In;
   var x1 = x1In;
@@ -503,6 +513,7 @@ fn rasterGouraudTriangle(xAIn: i32, xBIn: i32, xCIn: i32, yAIn: i32, yBIn: i32, 
   var colorA = colorAIn;
   var colorB = colorBIn;
   var colorC = colorCIn;
+  clipX = xA < 0 || xB < 0 || xC < 0 || xA > boundX || xB > boundX || xC > boundX;
   var xStepAB: i32;
   var colorStepAB: i32;
   if (yB != yA) {
