@@ -169,7 +169,7 @@ export abstract class Client extends GameShell {
     protected flameCycle0: number = 0;
     protected flameGradientCycle0: number = 0;
     protected flameGradientCycle1: number = 0;
-    protected flamesInterval: NodeJS.Timeout | null = null;
+    protected flamesInterval: ReturnType<typeof setTimeout> | null = null;
 
     // game world properties
     protected areaSidebar: PixMap | null = null;

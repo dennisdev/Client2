@@ -66,6 +66,7 @@ import Tile from './jagex2/dash3d/type/Tile';
 import DirectionFlag from './jagex2/dash3d/DirectionFlag';
 import ClientWorkerStream from './jagex2/io/ClientWorkerStream';
 import {Host, Peer} from './jagex2/io/RTCDataChannels';
+import {Renderer} from './jagex2/renderer/WebGPURenderer';
 
 // noinspection JSSuspiciousNameCombination
 class Game extends Client {
@@ -326,6 +327,8 @@ class Game extends Client {
             World3D.init(512, 334, 500, 800, distance);
             WordFilter.unpack(wordenc);
             this.initializeLevelExperience();
+
+            Renderer.init();
         } catch (err) {
             console.error(err);
             this.errorLoading = true;
@@ -1763,7 +1766,12 @@ class Game extends Client {
         Model.mouseX = this.mouseX - 8;
         Model.mouseY = this.mouseY - 11;
         Draw2D.clear();
+        Renderer.startRenderScene();
         this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
+        // Draw3D.fillGouraudTriangle(10, 150, 400, 250, 10, 250, 127, 0, 0);
+        // console.log(Draw3D.centerX, Draw3D.centerY);
+        // Draw3D.fillTexturedTriangle(390, 344, 383, 171, 202, 230, 0, 22, 0, 360, 251, 1961, 488, 349, 242, 139, 1966, 2021, 1)
+        Renderer.render();
         this.scene?.clearTemporaryLocs();
         this.draw2DEntityElements();
         this.drawTileHint();

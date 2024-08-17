@@ -6,6 +6,7 @@
             "ESNext",
             "DOM"
         ],
+        "types": ["@webgpu/types"],
         "allowJs": true,
         "checkJs": false,
         "strict": true,
