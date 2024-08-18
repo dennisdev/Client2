@@ -4288,6 +4288,8 @@ class Game extends Client {
                                 }
                             } else if (this.chatTyped === '::debug') {
                                 Client.showDebug = !Client.showDebug;
+                            } else if (this.chatTyped === '::cpu') {
+                                Renderer.cpuRasterEnabled = !Renderer.cpuRasterEnabled;
                             } else if (this.chatTyped === '::chat') {
                                 Client.chatEra = (Client.chatEra + 1) % 3;
                             } else if (this.chatTyped === '::peer') {

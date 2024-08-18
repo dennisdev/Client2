@@ -14,6 +14,8 @@ const TEXTURES_TRANSLUCENT_BYTES: number = TEXTURE_COUNT * 4;
 const TEXTURES_BYTES: number = TEXTURE_COUNT * TEXTURE_PIXEL_COUNT * 4 * 4;
 
 export class Renderer {
+    static cpuRasterEnabled: boolean = true;
+
     static device: GPUDevice | undefined;
 
     static lutsBuffer: GPUBuffer;
@@ -479,9 +481,9 @@ export class Renderer {
         Renderer.gouraudTriangleCount = 0;
     }
 
-    static fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): void => {
+    static fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): boolean => {
         if (Renderer.flatTriangleCount >= MAX_TRIANGLES) {
-            return;
+            return !Renderer.cpuRasterEnabled;
         }
         let offset: number = Renderer.flatTriangleCount * 8;
 
@@ -497,11 +499,12 @@ export class Renderer {
         Renderer.flatTriangleData[offset++] = color;
 
         Renderer.flatTriangleCount++;
+        return !Renderer.cpuRasterEnabled;
     };
 
-    static fillGouraudTriangle = (xA: number, xB: number, xC: number, yA: number, yB: number, yC: number, colorA: number, colorB: number, colorC: number): void => {
+    static fillGouraudTriangle = (xA: number, xB: number, xC: number, yA: number, yB: number, yC: number, colorA: number, colorB: number, colorC: number): boolean => {
         if (Renderer.gouraudTriangleCount >= MAX_TRIANGLES) {
-            return;
+            return !Renderer.cpuRasterEnabled;
         }
         let offset: number = Renderer.gouraudTriangleCount * 10;
 
@@ -519,6 +522,7 @@ export class Renderer {
         Renderer.gouraudTriangleData[offset++] = colorC;
 
         Renderer.gouraudTriangleCount++;
+        return !Renderer.cpuRasterEnabled;
     };
 
     static fillTexturedTriangle = (
@@ -541,9 +545,9 @@ export class Renderer {
         tzB: number,
         tzC: number,
         texture: number
-    ): void => {
+    ): boolean => {
         if (Renderer.texturedTriangleCount >= MAX_TRIANGLES) {
-            return;
+            return !Renderer.cpuRasterEnabled;
         }
         let offset: number = Renderer.texturedTriangleCount * 20;
 
@@ -571,5 +575,6 @@ export class Renderer {
         Renderer.texturedTriangleData[offset++] = texture;
 
         Renderer.texturedTriangleCount++;
+        return !Renderer.cpuRasterEnabled;
     };
 }

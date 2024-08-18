@@ -263,7 +263,9 @@ export default class Draw3D extends Draw2D {
     };
 
     static fillGouraudTriangle = (xA: number, xB: number, xC: number, yA: number, yB: number, yC: number, colorA: number, colorB: number, colorC: number): void => {
-        Renderer.fillGouraudTriangle(xA, xB, xC, yA, yB, yC, colorA, colorB, colorC);
+        if (Renderer.fillGouraudTriangle(xA, xB, xC, yA, yB, yC, colorA, colorB, colorC)) {
+            return;
+        }
 
         let xStepAB: number = 0;
         let colorStepAB: number = 0;
@@ -888,7 +890,9 @@ export default class Draw3D extends Draw2D {
     };
 
     static fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): void => {
-        Renderer.fillTriangle(x0, x1, x2, y0, y1, y2, color);
+        if (Renderer.fillTriangle(x0, x1, x2, y0, y1, y2, color)) {
+            return;
+        }
 
         let xStepAB: number = 0;
         if (y1 !== y0) {
@@ -1332,8 +1336,9 @@ export default class Draw3D extends Draw2D {
         tzC: number,
         texture: number
     ): void => {
-        // console.log(`array(${xA}, ${xB}, ${xC}, ${yA}, ${yB}, ${yC}, ${shadeA}, ${shadeB}, ${shadeC}, ${originX}, ${originY}, ${originZ}, ${txB}, ${txC}, ${tyB}, ${tyC}, ${tzB}, ${tzC}, ${texture}),`);
-        Renderer.fillTexturedTriangle(xA, xB, xC, yA, yB, yC, shadeA, shadeB, shadeC, originX, originY, originZ, txB, txC, tyB, tyC, tzB, tzC, texture);
+        if (Renderer.fillTexturedTriangle(xA, xB, xC, yA, yB, yC, shadeA, shadeB, shadeC, originX, originY, originZ, txB, txC, tyB, tyC, tzB, tzC, texture)) {
+            return;
+        }
 
         const texels: Int32Array | null = this.getTexels(texture);
         this.opaque = !this.textureTranslucent[texture];
