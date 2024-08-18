@@ -15,6 +15,7 @@
                 padding: 0;
                 color: #fff;
                 background-color: #000;
+                overflow-y: hidden;
             }
 
             canvas {
@@ -36,9 +37,7 @@
     </head>
     <body>
         <canvas id="canvas" width="789" height="532"></canvas>
-        <div style="width: 789px; height: 400px; margin: 0 auto;">
-            <canvas id="canvas-webgpu" width="512" height="334" style="margin: 11px 0 0 8px;"></canvas>
-        </div>
+        <canvas id="canvas-webgpu" width="789" height="532"></canvas>
         <script>
             const canvas = document.getElementById('canvas');
             let isDown = false;

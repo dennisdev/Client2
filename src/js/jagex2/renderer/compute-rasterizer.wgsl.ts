@@ -32,17 +32,17 @@ const centerY = height / 2;
 // const centerX = 256;
 // const centerY = 167;
 
-var<private> jagged = true;
-var<private> clipX = false;
-var<private> alpha = 0;
-
-var<private> opaqueTexture = true;
-
 const boundRight = width;
 const boundBottom = height;
 // const boundBottom = 334;
 const boundX = width - 1;
 // const boundX = 512 - 1;
+
+var<private> jagged = true;
+var<private> clipX = false;
+var<private> alpha = 0;
+
+var<private> opaqueTexture = true;
 
 var<private> depth = 0;
 var<private> writeDepth = false;

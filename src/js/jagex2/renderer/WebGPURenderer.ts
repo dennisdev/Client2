@@ -1,3 +1,4 @@
+import World3D from '../dash3d/World3D';
 import Draw3D from '../graphics/Draw3D';
 import {SHADER_CODE as computeRasterizerShaderCode} from './compute-rasterizer.wgsl';
 import {SHADER_CODE as fullscreenPixelsShaderCode} from './fullscreen-pixels.wgsl';
@@ -65,18 +66,21 @@ export class Renderer {
             format: presentationFormat
         });
 
+        const viewportWidth: number = World3D.viewportRight;
+        const viewportHeight: number = World3D.viewportBottom;
+
         const uniformBuffer: GPUBuffer = device.createBuffer({
             size: 2 * 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
-        device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([canvas.width, canvas.height]));
+        device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([viewportWidth, viewportHeight]));
 
         const pixelBuffer: GPUBuffer = device.createBuffer({
-            size: canvas.width * canvas.height * 4,
+            size: viewportWidth * viewportHeight * 4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
         const depthBuffer: GPUBuffer = device.createBuffer({
-            size: canvas.width * canvas.height * 4,
+            size: viewportWidth * viewportHeight * 4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
 
@@ -394,7 +398,7 @@ export class Renderer {
             computePass.setPipeline(clearPipeline);
             computePass.setBindGroup(0, rasterizerBindGroup);
             // computePass.setBindGroup(1, callsBindGroup);
-            computePass.dispatchWorkgroups(Math.ceil((canvas.width * canvas.height) / 256));
+            computePass.dispatchWorkgroups(Math.ceil((viewportWidth * viewportHeight) / 256));
 
             // render depth
             if (Renderer.flatTriangleCount > 0 && flatTriangleDataBindGroup) {
@@ -445,6 +449,8 @@ export class Renderer {
             computePass.end();
 
             const pass: GPURenderPassEncoder = encoder.beginRenderPass(renderPassDescriptor);
+
+            pass.setViewport(8, 11, viewportWidth, viewportHeight, 0, 1);
 
             pass.setPipeline(fullscreenPipeline);
             pass.setBindGroup(0, fullscreenBindGroup);
