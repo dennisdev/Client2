@@ -23,6 +23,7 @@ export class Renderer {
     static flatTriangleDataBuffer: GPUBuffer | undefined;
     static gouraudTriangleDataBuffer: GPUBuffer | undefined;
     static texturedTriangleDataBuffer: GPUBuffer | undefined;
+    static alphaTriangleDataBuffer: GPUBuffer | undefined;
 
     static triangleCount: number = 0;
 
@@ -34,6 +35,9 @@ export class Renderer {
 
     static texturedTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 20);
     static texturedTriangleCount: number = 0;
+
+    static alphaTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 10);
+    static alphaTriangleCount: number = 0;
 
     static frameCount: number = 0;
 
@@ -203,6 +207,14 @@ export class Renderer {
                 entryPoint: 'renderTextured'
             }
         });
+        const renderAlphaPipeline: GPUComputePipeline = device.createComputePipeline({
+            label: 'render alpha pipeline',
+            layout: device.createPipelineLayout({bindGroupLayouts: [rasterizerBindGroupLayout, triangleDataBindGroupLayout]}),
+            compute: {
+                module: rasterizerShaderModule,
+                entryPoint: 'renderAlpha'
+            }
+        });
 
         const fullscreenShaderModule: GPUShaderModule = device.createShaderModule({
             label: 'fullscreen pixels shaders',
@@ -282,6 +294,11 @@ export class Renderer {
                 texturedTriangleDataBuffer.destroy();
                 Renderer.texturedTriangleDataBuffer = undefined;
             }
+            let alphaTriangleDataBuffer: GPUBuffer | undefined = Renderer.alphaTriangleDataBuffer;
+            if (alphaTriangleDataBuffer) {
+                alphaTriangleDataBuffer.destroy();
+                Renderer.alphaTriangleDataBuffer = undefined;
+            }
 
             let flatTriangleDataBindGroup: GPUBindGroup | undefined;
             if (Renderer.flatTriangleCount > 0) {
@@ -346,6 +363,27 @@ export class Renderer {
                     ]
                 });
             }
+            let alphaTriangleDataBindGroup: GPUBindGroup | undefined;
+            if (Renderer.alphaTriangleCount > 0) {
+                alphaTriangleDataBuffer = device.createBuffer({
+                    size: Renderer.alphaTriangleCount * 10 * 4,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+                Renderer.alphaTriangleDataBuffer = alphaTriangleDataBuffer;
+                device.queue.writeBuffer(alphaTriangleDataBuffer, 0, Renderer.alphaTriangleData.subarray(0, Renderer.alphaTriangleCount * 10));
+
+                alphaTriangleDataBindGroup = device.createBindGroup({
+                    layout: triangleDataBindGroupLayout,
+                    entries: [
+                        {
+                            binding: 0,
+                            resource: {
+                                buffer: alphaTriangleDataBuffer
+                            }
+                        }
+                    ]
+                });
+            }
 
             const encoder: GPUCommandEncoder = device.createCommandEncoder({
                 label: 'render command encoder'
@@ -396,6 +434,12 @@ export class Renderer {
                 computePass.setBindGroup(0, rasterizerBindGroup);
                 computePass.setBindGroup(1, texturedTriangleDataBindGroup);
                 computePass.dispatchWorkgroups(Renderer.texturedTriangleCount);
+            }
+            if (Renderer.alphaTriangleCount > 0 && alphaTriangleDataBindGroup) {
+                computePass.setPipeline(renderAlphaPipeline);
+                computePass.setBindGroup(0, rasterizerBindGroup);
+                computePass.setBindGroup(1, alphaTriangleDataBindGroup);
+                computePass.dispatchWorkgroups(1);
             }
 
             computePass.end();
@@ -479,26 +523,41 @@ export class Renderer {
         Renderer.flatTriangleCount = 0;
         Renderer.texturedTriangleCount = 0;
         Renderer.gouraudTriangleCount = 0;
+        Renderer.alphaTriangleCount = 0;
     }
 
     static fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): boolean => {
         if (Renderer.flatTriangleCount >= MAX_TRIANGLES) {
             return !Renderer.cpuRasterEnabled;
         }
-        let offset: number = Renderer.flatTriangleCount * 8;
-
         const triangleIndex: number = Renderer.triangleCount++;
+        if (Draw3D.alpha !== 0) {
+            let offset: number = Renderer.alphaTriangleCount * 10;
 
-        Renderer.flatTriangleData[offset++] = triangleIndex;
-        Renderer.flatTriangleData[offset++] = x0;
-        Renderer.flatTriangleData[offset++] = x1;
-        Renderer.flatTriangleData[offset++] = x2;
-        Renderer.flatTriangleData[offset++] = y0;
-        Renderer.flatTriangleData[offset++] = y1;
-        Renderer.flatTriangleData[offset++] = y2;
-        Renderer.flatTriangleData[offset++] = color;
+            Renderer.alphaTriangleData[offset++] = (1 << 31) | (Draw3D.alpha << 23) | triangleIndex;
+            Renderer.alphaTriangleData[offset++] = x0;
+            Renderer.alphaTriangleData[offset++] = x1;
+            Renderer.alphaTriangleData[offset++] = x2;
+            Renderer.alphaTriangleData[offset++] = y0;
+            Renderer.alphaTriangleData[offset++] = y1;
+            Renderer.alphaTriangleData[offset++] = y2;
+            Renderer.alphaTriangleData[offset++] = color;
 
-        Renderer.flatTriangleCount++;
+            Renderer.alphaTriangleCount++;
+        } else {
+            let offset: number = Renderer.flatTriangleCount * 8;
+
+            Renderer.flatTriangleData[offset++] = triangleIndex;
+            Renderer.flatTriangleData[offset++] = x0;
+            Renderer.flatTriangleData[offset++] = x1;
+            Renderer.flatTriangleData[offset++] = x2;
+            Renderer.flatTriangleData[offset++] = y0;
+            Renderer.flatTriangleData[offset++] = y1;
+            Renderer.flatTriangleData[offset++] = y2;
+            Renderer.flatTriangleData[offset++] = color;
+
+            Renderer.flatTriangleCount++;
+        }
         return !Renderer.cpuRasterEnabled;
     };
 
@@ -506,22 +565,38 @@ export class Renderer {
         if (Renderer.gouraudTriangleCount >= MAX_TRIANGLES) {
             return !Renderer.cpuRasterEnabled;
         }
-        let offset: number = Renderer.gouraudTriangleCount * 10;
-
         const triangleIndex: number = Renderer.triangleCount++;
+        if (Draw3D.alpha !== 0) {
+            let offset: number = Renderer.alphaTriangleCount * 10;
 
-        Renderer.gouraudTriangleData[offset++] = triangleIndex;
-        Renderer.gouraudTriangleData[offset++] = xA;
-        Renderer.gouraudTriangleData[offset++] = xB;
-        Renderer.gouraudTriangleData[offset++] = xC;
-        Renderer.gouraudTriangleData[offset++] = yA;
-        Renderer.gouraudTriangleData[offset++] = yB;
-        Renderer.gouraudTriangleData[offset++] = yC;
-        Renderer.gouraudTriangleData[offset++] = colorA;
-        Renderer.gouraudTriangleData[offset++] = colorB;
-        Renderer.gouraudTriangleData[offset++] = colorC;
+            Renderer.alphaTriangleData[offset++] = (Draw3D.alpha << 23) | triangleIndex;
+            Renderer.alphaTriangleData[offset++] = xA;
+            Renderer.alphaTriangleData[offset++] = xB;
+            Renderer.alphaTriangleData[offset++] = xC;
+            Renderer.alphaTriangleData[offset++] = yA;
+            Renderer.alphaTriangleData[offset++] = yB;
+            Renderer.alphaTriangleData[offset++] = yC;
+            Renderer.alphaTriangleData[offset++] = colorA;
+            Renderer.alphaTriangleData[offset++] = colorB;
+            Renderer.alphaTriangleData[offset++] = colorC;
 
-        Renderer.gouraudTriangleCount++;
+            Renderer.alphaTriangleCount++;
+        } else {
+            let offset: number = Renderer.gouraudTriangleCount * 10;
+
+            Renderer.gouraudTriangleData[offset++] = triangleIndex;
+            Renderer.gouraudTriangleData[offset++] = xA;
+            Renderer.gouraudTriangleData[offset++] = xB;
+            Renderer.gouraudTriangleData[offset++] = xC;
+            Renderer.gouraudTriangleData[offset++] = yA;
+            Renderer.gouraudTriangleData[offset++] = yB;
+            Renderer.gouraudTriangleData[offset++] = yC;
+            Renderer.gouraudTriangleData[offset++] = colorA;
+            Renderer.gouraudTriangleData[offset++] = colorB;
+            Renderer.gouraudTriangleData[offset++] = colorC;
+
+            Renderer.gouraudTriangleCount++;
+        }
         return !Renderer.cpuRasterEnabled;
     };
 

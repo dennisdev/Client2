@@ -133,8 +133,32 @@ fn renderTexturedDepth(@builtin(global_invocation_id) global_id: vec3u) {
   }
 }
 
+@compute @workgroup_size(1, 1)
+fn renderAlpha(@builtin(global_invocation_id) global_id: vec3u) {
+  let triangleCount = i32(arrayLength(&calls)) / 10;
+  for (var i = 0; i < triangleCount; i++) {
+    let offset = i * 10;
+    depth = calls[offset] & 0x7fffff;
+    alpha = (calls[offset] >> 23) & 0xff;
+    var isFlat = (u32(calls[offset]) >> 31) == 1;
+    if (isFlat) {
+      rasterTriangle(
+        calls[offset + 1], calls[offset + 2], calls[offset + 3],
+        calls[offset + 4], calls[offset + 5], calls[offset + 6],
+        calls[offset + 7],
+      );
+    } else {
+      rasterGouraudTriangle(
+        calls[offset + 1], calls[offset + 2], calls[offset + 3],
+        calls[offset + 4], calls[offset + 5], calls[offset + 6],
+        calls[offset + 7], calls[offset + 8], calls[offset + 9],
+      );
+    }
+  }
+}
+
 fn setPixel(index: i32, value: i32) {
-  if (atomicLoad(&depthBuffer[index]) == depth) {
+  if (atomicLoad(&depthBuffer[index]) <= depth) {
     pixelBuffer.data[index] = value;
   }
 }
@@ -550,10 +574,11 @@ fn rasterTriangle(x0In: i32, x1In: i32, x2In: i32, y0In: i32, y1In: i32, y2In: i
   }
 }
 
-fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgb: i32) {
+fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgbIn: i32) {
   var x0 = x0In;
   var x1 = x1In;
   var offset = offsetIn;
+  var rgb = rgbIn;
   if (clipX) {
     if (x1 > boundX) {
       x1 = boundX;
@@ -566,7 +591,7 @@ fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgb: i32) {
     return;
   }  
   offset += x0;  
-  let length = x1 - x0;
+  var length = x1 - x0;
   if (writeDepth) {
     for (var x = 0; x < length; x++) {
       atomicMax(&depthBuffer[offset + x], depth);
@@ -575,7 +600,42 @@ fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgb: i32) {
     for (var x = 0; x < length; x++) {
       setPixel(offset + x, rgb);
     }
-  } else {  
+  } else {
+    length >>= 2;
+    let alpha = alpha;
+    let invAlpha = 256 - alpha;
+    rgb = ((((rgb & 0xff00ff) * invAlpha) >> 8) & 0xff00ff) + ((((rgb & 0xff00) * invAlpha) >> 8) & 0xff00);
+    var blendRgb: i32;
+    while (true) {
+      length--;
+      if (length < 0) {
+        length = (x1 - x0) & 0x3;
+        if (length > 0) {
+          while (true) {
+            blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+            setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+            offset++;
+            length--;
+            if (length <= 0) {
+              break;
+            }
+          }
+        }
+        break;
+      }
+      blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+      setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+      offset++;
+      blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+      setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+      offset++;
+      blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+      setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+      offset++;
+      blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+      setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+      offset++;
+    }
   }
 }
 
@@ -1145,6 +1205,45 @@ fn rasterGouraudScanline(x0In: i32, x1In: i32, color0In: i32, color1: i32, offse
         setPixel(offset, rgb);
         offset++;
         setPixel(offset, rgb);
+        offset++;
+      }
+    } else {
+      let alpha = alpha;
+      let invAlpha = 256 - alpha;
+      var blendRgb: i32;
+      while (true) {
+        length--;
+        if (length < 0) {
+          length = (x1 - x0) & 0x3;
+          if (length > 0) {
+            rgb = luts.palette[color0 >> 8];
+            rgb = ((((rgb & 0xff00ff) * invAlpha) >> 8) & 0xff00ff) + ((((rgb & 0xff00) * invAlpha) >> 8) & 0xff00);
+            while (true) {
+              blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+              setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+              offset++;
+              length--;
+              if (length <= 0) {
+                break;
+              }
+            }
+          }
+          break;
+        }
+        rgb = luts.palette[color0 >> 8];
+        color0 += colorStep;
+        rgb = ((((rgb & 0xff00ff) * invAlpha) >> 8) & 0xff00ff) + ((((rgb & 0xff00) * invAlpha) >> 8) & 0xff00);
+        blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+        setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+        offset++;
+        blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+        setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+        offset++;
+        blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+        setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
+        offset++;
+        blendRgb = pixelBuffer.data[offset + i32(atomicLoad(&depthBuffer[offset + 1]) < depth)];
+        setPixel(offset, rgb + ((((blendRgb & 0xff00ff) * alpha) >> 8) & 0xff00ff) + ((((blendRgb & 0xff00) * alpha) >> 8) & 0xff00));
         offset++;
       }
     }
