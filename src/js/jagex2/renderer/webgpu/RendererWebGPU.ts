@@ -4,7 +4,7 @@ import {Renderer} from '../Renderer';
 import {SHADER_CODE as computeRasterizerShaderCode} from './shaders/compute-rasterizer.wgsl';
 import {SHADER_CODE as fullscreenPixelsShaderCode} from './shaders/fullscreen-pixels.wgsl';
 
-const MAX_TRIANGLES: number = 100000;
+const INITIAL_TRIANGLES: number = 65536;
 
 const TEXTURE_COUNT: number = 50;
 
@@ -60,19 +60,23 @@ export class RendererWebGPU extends Renderer {
 
     triangleCount: number = 0;
 
-    flatTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 8);
+    flatTriangleData: Uint32Array = new Uint32Array(INITIAL_TRIANGLES * 8);
     flatTriangleCount: number = 0;
 
-    gouraudTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 10);
+    gouraudTriangleData: Uint32Array = new Uint32Array(INITIAL_TRIANGLES * 10);
     gouraudTriangleCount: number = 0;
 
-    texturedTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 20);
+    texturedTriangleData: Uint32Array = new Uint32Array(INITIAL_TRIANGLES * 20);
     texturedTriangleCount: number = 0;
 
-    alphaTriangleData: Uint32Array = new Uint32Array(MAX_TRIANGLES * 10);
+    alphaTriangleData: Uint32Array = new Uint32Array(INITIAL_TRIANGLES * 10);
     alphaTriangleCount: number = 0;
 
     frameCount: number = 0;
+
+    static hasWebGPUSupport(): boolean {
+        return 'gpu' in navigator;
+    }
 
     static async init(container: HTMLElement, width: number, height: number): Promise<RendererWebGPU | undefined> {
         const adapter: GPUAdapter | null = await navigator.gpu?.requestAdapter();
@@ -92,6 +96,7 @@ export class RendererWebGPU extends Renderer {
         // @ts-expect-error: For some reason TS doesn't know about GPUCanvasContext
         const context: GPUCanvasContext | null = canvas.getContext('webgpu');
         if (!context) {
+            canvas.remove();
             return;
         }
         const presentationFormat: GPUTextureFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -564,12 +569,15 @@ export class RendererWebGPU extends Renderer {
         if (!this.isRenderingScene) {
             return false;
         }
-        if (this.flatTriangleCount >= MAX_TRIANGLES) {
-            return !Renderer.cpuRasterEnabled;
-        }
         const triangleIndex: number = this.triangleCount++;
         if (Draw3D.alpha !== 0) {
             let offset: number = this.alphaTriangleCount * 10;
+
+            if (offset >= this.alphaTriangleData.length) {
+                const newData: Uint32Array = new Uint32Array(this.alphaTriangleData.length * 2);
+                newData.set(this.alphaTriangleData);
+                this.alphaTriangleData = newData;
+            }
 
             this.alphaTriangleData[offset++] = (1 << 31) | (Draw3D.alpha << 23) | triangleIndex;
             this.alphaTriangleData[offset++] = x0;
@@ -583,6 +591,12 @@ export class RendererWebGPU extends Renderer {
             this.alphaTriangleCount++;
         } else {
             let offset: number = this.flatTriangleCount * 8;
+
+            if (offset >= this.flatTriangleData.length) {
+                const newData: Uint32Array = new Uint32Array(this.flatTriangleData.length * 2);
+                newData.set(this.flatTriangleData);
+                this.flatTriangleData = newData;
+            }
 
             this.flatTriangleData[offset++] = triangleIndex;
             this.flatTriangleData[offset++] = x0;
@@ -602,12 +616,15 @@ export class RendererWebGPU extends Renderer {
         if (!this.isRenderingScene) {
             return false;
         }
-        if (this.gouraudTriangleCount >= MAX_TRIANGLES) {
-            return !Renderer.cpuRasterEnabled;
-        }
         const triangleIndex: number = this.triangleCount++;
         if (Draw3D.alpha !== 0) {
             let offset: number = this.alphaTriangleCount * 10;
+
+            if (offset >= this.alphaTriangleData.length) {
+                const newData: Uint32Array = new Uint32Array(this.alphaTriangleData.length * 2);
+                newData.set(this.alphaTriangleData);
+                this.alphaTriangleData = newData;
+            }
 
             this.alphaTriangleData[offset++] = (Draw3D.alpha << 23) | triangleIndex;
             this.alphaTriangleData[offset++] = xA;
@@ -623,6 +640,12 @@ export class RendererWebGPU extends Renderer {
             this.alphaTriangleCount++;
         } else {
             let offset: number = this.gouraudTriangleCount * 10;
+
+            if (offset >= this.gouraudTriangleData.length) {
+                const newData: Uint32Array = new Uint32Array(this.gouraudTriangleData.length * 2);
+                newData.set(this.gouraudTriangleData);
+                this.gouraudTriangleData = newData;
+            }
 
             this.gouraudTriangleData[offset++] = triangleIndex;
             this.gouraudTriangleData[offset++] = xA;
@@ -664,12 +687,15 @@ export class RendererWebGPU extends Renderer {
         if (!this.isRenderingScene) {
             return false;
         }
-        if (this.texturedTriangleCount >= MAX_TRIANGLES) {
-            return !Renderer.cpuRasterEnabled;
-        }
+        const triangleIndex: number = this.triangleCount++;
+
         let offset: number = this.texturedTriangleCount * 20;
 
-        const triangleIndex: number = this.triangleCount++;
+        if (offset >= this.texturedTriangleData.length) {
+            const newData: Uint32Array = new Uint32Array(this.texturedTriangleData.length * 2);
+            newData.set(this.texturedTriangleData);
+            this.texturedTriangleData = newData;
+        }
 
         this.texturedTriangleData[offset++] = triangleIndex;
         this.texturedTriangleData[offset++] = xA;
