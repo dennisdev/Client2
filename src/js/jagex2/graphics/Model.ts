@@ -1511,7 +1511,7 @@ export default class Model extends Hashable {
 
     // runtime
     objRaise: number = 0;
-    pickable: boolean = false;
+    pickAabb: boolean = false;
     pickedFace: number = -1;
     pickedFaceDepth: number = -1;
 
@@ -2103,7 +2103,7 @@ export default class Model extends Hashable {
             const mouseX: number = Model.mouseX - Draw3D.centerX;
             const mouseY: number = Model.mouseY - Draw3D.centerY;
             if (mouseX > leftX && mouseX < rightX && mouseY > topY && mouseY < bottomY) {
-                if (this.pickable) {
+                if (this.pickAabb) {
                     Model.pickedBitsets[Model.pickedCount++] = bitset;
                 } else {
                     picking = true;

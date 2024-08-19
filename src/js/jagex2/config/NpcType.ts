@@ -201,7 +201,7 @@ export default class NpcType extends ConfigType {
             tmp.labelVertices = null;
 
             if (this.size === 1) {
-                tmp.pickable = true;
+                tmp.pickAabb = true;
             }
             return tmp;
         }

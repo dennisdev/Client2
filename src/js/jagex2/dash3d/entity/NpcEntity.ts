@@ -48,7 +48,7 @@ export default class NpcEntity extends PathingEntity {
 
         const tmp: Model = Model.modelFromModelsBounds(models, 2);
         if (this.type.size === 1) {
-            tmp.pickable = true;
+            tmp.pickAabb = true;
         }
 
         return tmp;

@@ -144,7 +144,7 @@ export default class PlayerEntity extends PathingEntity {
 
         let model: Model = this.getSequencedModel();
         this.height = model.maxY;
-        model.pickable = true;
+        model.pickAabb = true;
 
         if (this.lowMemory) {
             return model;
@@ -207,7 +207,7 @@ export default class PlayerEntity extends PathingEntity {
             }
         }
 
-        model.pickable = true;
+        model.pickAabb = true;
         return model;
     }
 
