@@ -129,7 +129,6 @@ export class RendererWebGPU extends Renderer {
         canvas.style.height = '100%';
         container.appendChild(canvas);
 
-        // @ts-expect-error: For some reason TS doesn't know about GPUCanvasContext
         const context: GPUCanvasContext | null = canvas.getContext('webgpu');
         if (!context) {
             canvas.remove();
