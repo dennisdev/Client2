@@ -1,7 +1,7 @@
+import PixMap from '../graphics/PixMap';
+
 export abstract class Renderer {
     static renderer: Renderer | undefined;
-
-    static cpuRasterEnabled: boolean = true;
 
     constructor(readonly canvas: HTMLCanvasElement) {}
 
@@ -14,33 +14,45 @@ export abstract class Renderer {
     }
 
     static resize(width: number, height: number): void {
-        if (Renderer.renderer) {
-            Renderer.renderer.resize(width, height);
-        }
+        Renderer.renderer?.resize(width, height);
+    }
+
+    static startFrame(): void {
+        Renderer.renderer?.startFrame();
+    }
+
+    static endFrame(): void {
+        Renderer.renderer?.endFrame();
     }
 
     static updateTexture(id: number): void {
-        if (Renderer.renderer) {
-            Renderer.renderer.updateTexture(id);
-        }
+        Renderer.renderer?.updateTexture(id);
     }
 
     static setBrightness(brightness: number): void {
+        Renderer.renderer?.setBrightness(brightness);
+    }
+
+    static renderPixMap(pixmap: PixMap, x: number, y: number): boolean {
         if (Renderer.renderer) {
-            Renderer.renderer.setBrightness(brightness);
+            return Renderer.renderer.renderPixMap(pixmap, x, y);
         }
+        return false;
+    }
+
+    static getSceneClearColor(): number {
+        if (Renderer.renderer) {
+            return -1;
+        }
+        return 0;
     }
 
     static startRenderScene(): void {
-        if (Renderer.renderer) {
-            Renderer.renderer.startRenderScene();
-        }
+        Renderer.renderer?.startRenderScene();
     }
 
     static endRenderScene(): void {
-        if (Renderer.renderer) {
-            Renderer.renderer.endRenderScene();
-        }
+        Renderer.renderer?.endRenderScene();
     }
 
     static fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): boolean => {
@@ -89,9 +101,15 @@ export abstract class Renderer {
         this.canvas.height = height;
     }
 
+    abstract startFrame(): void;
+
+    abstract endFrame(): void;
+
     abstract updateTexture(id: number): void;
 
     abstract setBrightness(brightness: number): void;
+
+    abstract renderPixMap(pixMap: PixMap, x: number, y: number): boolean;
 
     abstract startRenderScene(): void;
 

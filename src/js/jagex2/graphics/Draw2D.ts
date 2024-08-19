@@ -57,10 +57,10 @@ export default class Draw2D extends Hashable {
         this.centerY2d = (this.bottom / 2) | 0;
     };
 
-    static clear = (): void => {
+    static clear = (v: number = 0): void => {
         const len: number = this.width2d * this.height2d;
         for (let i: number = 0; i < len; i++) {
-            this.pixels[i] = 0;
+            this.pixels[i] = v;
         }
     };
 

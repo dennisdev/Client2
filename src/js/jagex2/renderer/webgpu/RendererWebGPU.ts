@@ -1,8 +1,13 @@
 import World3D from '../../dash3d/World3D';
+import {canvas as cpuCanvas} from '../../graphics/Canvas';
 import Draw3D from '../../graphics/Draw3D';
+import PixMap from '../../graphics/PixMap';
 import {Renderer} from '../Renderer';
 import {SHADER_CODE as computeRasterizerShaderCode} from './shaders/compute-rasterizer.wgsl';
 import {SHADER_CODE as fullscreenPixelsShaderCode} from './shaders/fullscreen-pixels.wgsl';
+import {SHADER_CODE as fullscreenPixMapShaderCode} from './shaders/fullscreen-pixmap.wgsl';
+import {SHADER_CODE as fullscreenTextureShaderCode} from './shaders/fullscreen-texture.wgsl';
+import {SHADER_CODE as fullscreenVertexShaderCode} from './shaders/fullscreen-vertex.wgsl';
 
 const INITIAL_TRIANGLES: number = 65536;
 
@@ -15,9 +20,20 @@ const PALETTE_BYTES: number = 65536 * 4;
 const TEXTURES_TRANSLUCENT_BYTES: number = TEXTURE_COUNT * 4;
 const TEXTURES_BYTES: number = TEXTURE_COUNT * TEXTURE_PIXEL_COUNT * 4 * 4;
 
+interface QueuedRenderPixMapCommand {
+    pixMap: PixMap;
+    x: number;
+    y: number;
+}
+
 export class RendererWebGPU extends Renderer {
     device: GPUDevice;
     context: GPUCanvasContext;
+
+    defaultSampler!: GPUSampler;
+    samplerTextureGroupLayout!: GPUBindGroupLayout;
+    frameTexture!: GPUTexture;
+    frameBindGroup!: GPUBindGroup;
 
     uniformBuffer!: GPUBuffer;
 
@@ -45,10 +61,17 @@ export class RendererWebGPU extends Renderer {
     renderTexturedPipeline!: GPUComputePipeline;
     renderAlphaPipeline!: GPUComputePipeline;
 
-    fullscreenShaderModule!: GPUShaderModule;
-    fullscreenPipeline!: GPURenderPipeline;
-    fullscreenBindGroup!: GPUBindGroup;
+    fullscreenVertexShaderModule!: GPUShaderModule;
+    pixMapShaderModule!: GPUShaderModule;
+    pixMapPipeline!: GPURenderPipeline;
+    textureShaderModule!: GPUShaderModule;
+    frameTexturePipeline!: GPURenderPipeline;
 
+    pixelBufferShaderModule!: GPUShaderModule;
+    pixelBufferPipeline!: GPURenderPipeline;
+    pixelBufferBindGroup!: GPUBindGroup;
+
+    frameRenderPassDescriptor!: GPURenderPassDescriptor;
     renderPassDescriptor!: GPURenderPassDescriptor;
 
     flatTriangleDataBuffer: GPUBuffer | undefined;
@@ -56,7 +79,14 @@ export class RendererWebGPU extends Renderer {
     texturedTriangleDataBuffer: GPUBuffer | undefined;
     alphaTriangleDataBuffer: GPUBuffer | undefined;
 
+    encoder!: GPUCommandEncoder;
+    mainPass!: GPURenderPassEncoder;
+
+    isRenderingFrame: boolean = false;
+
     isRenderingScene: boolean = false;
+
+    queuedRenderPixMapCommands: QueuedRenderPixMapCommand[] = [];
 
     triangleCount: number = 0;
 
@@ -71,6 +101,10 @@ export class RendererWebGPU extends Renderer {
 
     alphaTriangleData: Uint32Array = new Uint32Array(INITIAL_TRIANGLES * 10);
     alphaTriangleCount: number = 0;
+
+    texturesToDelete: GPUTexture[] = [];
+
+    texturesUsed: boolean[] = new Array(TEXTURE_COUNT).fill(false);
 
     frameCount: number = 0;
 
@@ -119,6 +153,43 @@ export class RendererWebGPU extends Renderer {
         const viewportWidth: number = World3D.viewportRight;
         const viewportHeight: number = World3D.viewportBottom;
 
+        this.defaultSampler = this.device.createSampler();
+        this.samplerTextureGroupLayout = this.device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    sampler: {type: 'filtering'}
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    texture: {sampleType: 'float'}
+                }
+            ]
+        });
+
+        this.frameTexture = this.device.createTexture({
+            size: {width: this.canvas.width, height: this.canvas.height},
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        });
+        this.frameBindGroup = this.device.createBindGroup({
+            layout: this.samplerTextureGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: this.defaultSampler
+                },
+                {
+                    binding: 1,
+                    resource: this.frameTexture.createView()
+                }
+            ]
+        });
+
+        this.device.queue.copyExternalImageToTexture({source: cpuCanvas}, {texture: this.frameTexture}, {width: this.canvas.width, height: this.canvas.height});
+
         this.uniformBuffer = this.device.createBuffer({
             size: 2 * 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -139,7 +210,8 @@ export class RendererWebGPU extends Renderer {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
 
-        this.updateBrightness();
+        this.updatePalette();
+        this.updateTextures();
 
         this.rasterizerShaderModule = this.device.createShaderModule({
             label: 'rasterizer shaders',
@@ -269,25 +341,60 @@ export class RendererWebGPU extends Renderer {
             }
         });
 
-        this.fullscreenShaderModule = this.device.createShaderModule({
-            label: 'fullscreen pixels shaders',
-            code: fullscreenPixelsShaderCode
+        this.fullscreenVertexShaderModule = this.device.createShaderModule({
+            label: 'fullscreen vertex shader',
+            code: fullscreenVertexShaderCode
         });
-
-        this.fullscreenPipeline = this.device.createRenderPipeline({
-            label: 'fullscreen pixels pipeline',
-            layout: 'auto',
+        this.pixMapShaderModule = this.device.createShaderModule({
+            label: 'pixmap shader',
+            code: fullscreenPixMapShaderCode
+        });
+        this.pixMapPipeline = this.device.createRenderPipeline({
+            label: 'pixmap pipeline',
+            layout: this.device.createPipelineLayout({bindGroupLayouts: [this.samplerTextureGroupLayout]}),
             vertex: {
-                module: this.fullscreenShaderModule
+                module: this.fullscreenVertexShaderModule
             },
             fragment: {
-                module: this.fullscreenShaderModule,
+                module: this.pixMapShaderModule,
+                targets: [{format: 'rgba8unorm'}]
+            }
+        });
+        this.textureShaderModule = this.device.createShaderModule({
+            label: 'texture shader',
+            code: fullscreenTextureShaderCode
+        });
+        this.frameTexturePipeline = this.device.createRenderPipeline({
+            label: 'frame texture pipeline',
+            layout: this.device.createPipelineLayout({bindGroupLayouts: [this.samplerTextureGroupLayout]}),
+            vertex: {
+                module: this.fullscreenVertexShaderModule
+            },
+            fragment: {
+                module: this.textureShaderModule,
                 targets: [{format: navigator.gpu.getPreferredCanvasFormat()}]
             }
         });
 
-        this.fullscreenBindGroup = this.device.createBindGroup({
-            layout: this.fullscreenPipeline.getBindGroupLayout(0),
+        this.pixelBufferShaderModule = this.device.createShaderModule({
+            label: 'pixel buffer shader',
+            code: fullscreenPixelsShaderCode
+        });
+
+        this.pixelBufferPipeline = this.device.createRenderPipeline({
+            label: 'pixel buffer pipeline',
+            layout: 'auto',
+            vertex: {
+                module: this.fullscreenVertexShaderModule
+            },
+            fragment: {
+                module: this.pixelBufferShaderModule,
+                targets: [{format: 'rgba8unorm'}]
+            }
+        });
+
+        this.pixelBufferBindGroup = this.device.createBindGroup({
+            layout: this.pixelBufferPipeline.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
@@ -304,8 +411,8 @@ export class RendererWebGPU extends Renderer {
             ]
         });
 
-        this.renderPassDescriptor = {
-            label: 'main render pass',
+        this.frameRenderPassDescriptor = {
+            label: 'frame render pass',
             colorAttachments: [
                 {
                     view: this.context.getCurrentTexture().createView(),
@@ -315,16 +422,76 @@ export class RendererWebGPU extends Renderer {
                         b: 0.0,
                         a: 1.0
                     },
-                    loadOp: 'clear',
+                    loadOp: 'load',
+                    storeOp: 'store'
+                }
+            ]
+        };
+        this.renderPassDescriptor = {
+            label: 'main render pass',
+            colorAttachments: [
+                {
+                    view: this.frameTexture.createView(),
+                    clearValue: {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0
+                    },
+                    loadOp: 'load',
                     storeOp: 'store'
                 }
             ]
         };
     }
 
-    updateBrightness(): void {
-        this.updatePalette();
-        this.updateTextures();
+    override resize(width: number, height: number): void {
+        super.resize(width, height);
+    }
+
+    override startFrame(): void {
+        this.isRenderingFrame = true;
+
+        this.texturesUsed.fill(false);
+
+        this.encoder = this.device.createCommandEncoder({
+            label: 'render command encoder'
+        });
+        this.mainPass = this.encoder.beginRenderPass(this.renderPassDescriptor);
+
+        for (const command of this.queuedRenderPixMapCommands) {
+            this.renderPixMap(command.pixMap, command.x, command.y);
+        }
+        this.queuedRenderPixMapCommands.length = 0;
+    }
+
+    override endFrame(): void {
+        if (!this.isRenderingFrame) {
+            return;
+        }
+        this.isRenderingFrame = false;
+
+        this.mainPass.end();
+
+        for (const colorAttachment of this.frameRenderPassDescriptor.colorAttachments) {
+            colorAttachment!.view = this.context.getCurrentTexture().createView();
+        }
+
+        const framePass: GPURenderPassEncoder = this.encoder.beginRenderPass(this.frameRenderPassDescriptor);
+        framePass.setViewport(0, 0, this.canvas.width, this.canvas.height, 0, 1);
+        framePass.setPipeline(this.frameTexturePipeline);
+        framePass.setBindGroup(0, this.frameBindGroup);
+        framePass.draw(3);
+        framePass.end();
+
+        const commandBuffer: GPUCommandBuffer = this.encoder.finish();
+
+        this.device.queue.submit([commandBuffer]);
+
+        for (const texture of this.texturesToDelete) {
+            texture.destroy();
+        }
+        this.texturesToDelete.length = 0;
     }
 
     updatePalette(): void {
@@ -342,7 +509,7 @@ export class RendererWebGPU extends Renderer {
         this.device.queue.writeBuffer(this.lutsBuffer, PALETTE_BYTES, texturesTranslucentData);
     }
 
-    updateTexture(id: number): void {
+    override updateTexture(id: number): void {
         const texels: Int32Array | null = Draw3D.getTexels(id);
         if (!texels) {
             return;
@@ -350,11 +517,60 @@ export class RendererWebGPU extends Renderer {
         this.device.queue.writeBuffer(this.lutsBuffer, PALETTE_BYTES + TEXTURES_TRANSLUCENT_BYTES + id * TEXTURE_PIXEL_COUNT * 4 * 4, new Uint32Array(texels));
     }
 
-    setBrightness(brightness: number): void {
-        this.updateBrightness();
+    override setBrightness(brightness: number): void {
+        this.updatePalette();
     }
 
-    startRenderScene(): void {
+    override renderPixMap(pixMap: PixMap, x: number, y: number): boolean {
+        if (!this.isRenderingFrame) {
+            // Login screen flames are rendered outside of the frame loop
+            this.queuedRenderPixMapCommands.push({pixMap, x, y});
+            return true;
+        }
+
+        const viewportWidth: number = World3D.viewportRight;
+        const viewportHeight: number = World3D.viewportBottom;
+
+        if (pixMap.width === viewportWidth && pixMap.height === viewportHeight) {
+            this.mainPass.setViewport(x, y, viewportWidth, viewportHeight, 0, 1);
+
+            this.mainPass.setPipeline(this.pixelBufferPipeline);
+            this.mainPass.setBindGroup(0, this.pixelBufferBindGroup);
+            this.mainPass.draw(3);
+        }
+
+        const texture: GPUTexture = this.device.createTexture({
+            size: {width: pixMap.width, height: pixMap.height},
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING
+        });
+        this.device.queue.writeTexture({texture}, pixMap.pixels, {bytesPerRow: pixMap.width * 4}, {width: pixMap.width, height: pixMap.height});
+
+        const bindGroup: GPUBindGroup = this.device.createBindGroup({
+            layout: this.samplerTextureGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: this.defaultSampler
+                },
+                {
+                    binding: 1,
+                    resource: texture.createView()
+                }
+            ]
+        });
+
+        this.mainPass.setViewport(x, y, pixMap.width, pixMap.height, 0, 1);
+        this.mainPass.setPipeline(this.pixMapPipeline);
+        this.mainPass.setBindGroup(0, bindGroup);
+        this.mainPass.draw(3);
+
+        this.texturesToDelete.push(texture);
+
+        return true;
+    }
+
+    override startRenderScene(): void {
         this.isRenderingScene = true;
         this.triangleCount = 0;
         this.flatTriangleCount = 0;
@@ -363,20 +579,14 @@ export class RendererWebGPU extends Renderer {
         this.alphaTriangleCount = 0;
     }
 
-    endRenderScene(): void {
+    override endRenderScene(): void {
         this.isRenderingScene = false;
-        this.render();
+        this.renderScene();
     }
 
-    render(): void {
-        const start: number = performance.now();
-
+    renderScene(): void {
         const viewportWidth: number = World3D.viewportRight;
         const viewportHeight: number = World3D.viewportBottom;
-
-        for (const colorAttachment of this.renderPassDescriptor.colorAttachments) {
-            colorAttachment!.view = this.context.getCurrentTexture().createView();
-        }
 
         let flatTriangleDataBuffer: GPUBuffer | undefined = this.flatTriangleDataBuffer;
         if (flatTriangleDataBuffer) {
@@ -485,14 +695,13 @@ export class RendererWebGPU extends Renderer {
         }
 
         const encoder: GPUCommandEncoder = this.device.createCommandEncoder({
-            label: 'render command encoder'
+            label: 'render scene command encoder'
         });
 
         const computePass: GPUComputePassEncoder = encoder.beginComputePass();
 
         computePass.setPipeline(this.clearPipeline);
         computePass.setBindGroup(0, this.rasterizerBindGroup);
-        // computePass.setBindGroup(1, callsBindGroup);
         computePass.dispatchWorkgroups(Math.ceil((viewportWidth * viewportHeight) / 256));
 
         // render depth
@@ -543,29 +752,11 @@ export class RendererWebGPU extends Renderer {
 
         computePass.end();
 
-        const pass: GPURenderPassEncoder = encoder.beginRenderPass(this.renderPassDescriptor);
-
-        pass.setViewport(8, 11, viewportWidth, viewportHeight, 0, 1);
-
-        pass.setPipeline(this.fullscreenPipeline);
-        pass.setBindGroup(0, this.fullscreenBindGroup);
-        pass.draw(3);
-
-        pass.end();
-
         const commandBuffer: GPUCommandBuffer = encoder.finish();
         this.device.queue.submit([commandBuffer]);
-
-        const end: number = performance.now();
-
-        if (this.frameCount % 200 === 0) {
-            console.log(`Render time: ${end - start}ms`);
-        }
-
-        this.frameCount++;
     }
 
-    fillTriangle = (x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): boolean => {
+    override fillTriangle(x0: number, x1: number, x2: number, y0: number, y1: number, y2: number, color: number): boolean {
         if (!this.isRenderingScene) {
             return false;
         }
@@ -609,10 +800,10 @@ export class RendererWebGPU extends Renderer {
 
             this.flatTriangleCount++;
         }
-        return !Renderer.cpuRasterEnabled;
-    };
+        return true;
+    }
 
-    fillGouraudTriangle = (xA: number, xB: number, xC: number, yA: number, yB: number, yC: number, colorA: number, colorB: number, colorC: number): boolean => {
+    override fillGouraudTriangle(xA: number, xB: number, xC: number, yA: number, yB: number, yC: number, colorA: number, colorB: number, colorC: number): boolean {
         if (!this.isRenderingScene) {
             return false;
         }
@@ -660,10 +851,10 @@ export class RendererWebGPU extends Renderer {
 
             this.gouraudTriangleCount++;
         }
-        return !Renderer.cpuRasterEnabled;
-    };
+        return true;
+    }
 
-    fillTexturedTriangle = (
+    override fillTexturedTriangle(
         xA: number,
         xB: number,
         xC: number,
@@ -683,10 +874,17 @@ export class RendererWebGPU extends Renderer {
         tzB: number,
         tzC: number,
         texture: number
-    ): boolean => {
+    ): boolean {
         if (!this.isRenderingScene) {
             return false;
         }
+
+        // Flag texture as used for animated textures
+        if (!this.texturesUsed[texture]) {
+            Draw3D.textureCycle[texture] = Draw3D.cycle++;
+            this.texturesUsed[texture] = true;
+        }
+
         const triangleIndex: number = this.triangleCount++;
 
         let offset: number = this.texturedTriangleCount * 20;
@@ -719,10 +917,10 @@ export class RendererWebGPU extends Renderer {
         this.texturedTriangleData[offset++] = texture;
 
         this.texturedTriangleCount++;
-        return !Renderer.cpuRasterEnabled;
-    };
+        return true;
+    }
 
-    destroy(): void {
+    override destroy(): void {
         this.device.destroy();
     }
 }

@@ -330,8 +330,11 @@ class Game extends Client {
             WordFilter.unpack(wordenc);
             this.initializeLevelExperience();
 
-            // Renderer.init();
-            // WebGPURenderer.init(canvasContainer);
+            try {
+                Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+            } catch (e) {
+                console.error('Failed creating webgpu renderer', e);
+            }
         } catch (err) {
             console.error(err);
             this.errorLoading = true;
@@ -351,6 +354,7 @@ class Game extends Client {
     };
 
     draw = async (): Promise<void> => {
+        Renderer.startFrame();
         if (this.errorStarted || this.errorLoading || this.errorHost) {
             this.drawError();
             return;
@@ -361,6 +365,7 @@ class Game extends Client {
             await this.drawTitleScreen();
         }
         this.dragCycles = 0;
+        Renderer.endFrame();
     };
 
     refresh = (): void => {
@@ -1768,7 +1773,7 @@ class Game extends Client {
         Model.pickedCount = 0;
         Model.mouseX = this.mouseX - 8;
         Model.mouseY = this.mouseY - 11;
-        Draw2D.clear();
+        Draw2D.clear(Renderer.getSceneClearColor());
         Renderer.startRenderScene();
         this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
         Renderer.endRenderScene();
@@ -4288,13 +4293,15 @@ class Game extends Client {
                                 }
                             } else if (this.chatTyped === '::debug') {
                                 Client.showDebug = !Client.showDebug;
-                            } else if (this.chatTyped === '::cpu') {
-                                Renderer.cpuRasterEnabled = !Renderer.cpuRasterEnabled;
                             } else if (this.chatTyped === '::gpu') {
                                 if (Renderer.renderer) {
                                     Renderer.resetRenderer();
                                 } else {
-                                    Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                                    try {
+                                        Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                                    } catch (e) {
+                                        console.error('Failed creating webgpu renderer', e);
+                                    }
                                 }
                             } else if (this.chatTyped === '::chat') {
                                 Client.chatEra = (Client.chatEra + 1) % 3;

@@ -46,6 +46,7 @@ import Tile from './jagex2/dash3d/type/Tile';
 import ClientWorkerStream from './jagex2/io/ClientWorkerStream';
 import {downloadURL} from './jagex2/util/SaveUtil';
 import {Host, Peer} from './jagex2/io/RTCDataChannels';
+import {Renderer} from './jagex2/renderer/Renderer';
 
 // noinspection JSSuspiciousNameCombination
 export abstract class Client extends GameShell {
@@ -865,6 +866,7 @@ export abstract class Client extends GameShell {
     };
 
     protected drawError = (): void => {
+        Renderer.resetRenderer();
         canvas2d.fillStyle = 'black';
         canvas2d.fillRect(0, 0, this.width, this.height);
 
