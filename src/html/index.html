@@ -15,12 +15,12 @@
                 padding: 0;
                 color: #fff;
                 background-color: #000;
-                overflow-y: hidden;
             }
 
-            canvas {
+            #canvas {
                 display: block;
-                margin: 0 auto;
+                position: absolute;
+                /* margin: 0 auto; */
 
                 touch-action: none;
                 -webkit-touch-callout: none;
@@ -33,12 +33,40 @@
                 -webkit-tap-highlight-color: rgba(255, 255, 255, 0);
                 z-index: -1;
             }
+
+            #canvas-container {
+                position: relative;
+                margin: 0 auto;
+                width: 789px;
+                height: 532px;
+            }
+
+            #canvas-overlay {
+                position: absolute;
+                z-index: 10;
+
+                width: 100%;
+                height: 100%;
+
+                touch-action: none;
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                -khtml-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+                outline: none;
+                -webkit-tap-highlight-color: rgba(255, 255, 255, 0);
+            }
         </style>
     </head>
     <body>
-        <canvas id="canvas" width="789" height="532"></canvas>
-        <canvas id="canvas-webgpu" width="789" height="532"></canvas>
-        <script>
+        <div id="canvas-container">
+            <div id="canvas-overlay"></div>
+            <canvas id="canvas" width="789" height="532"></canvas>
+        </div>
+        <!-- <canvas id="canvas-webgpu" width="789" height="532"></canvas> -->
+        <!-- <script>
             const canvas = document.getElementById('canvas');
             let isDown = false;
             document.addEventListener('keydown', function(e) {
@@ -61,6 +89,6 @@
                     canvas.focus();
                 }
             });
-        </script>
+        </script> -->
     </body>
 </html>

@@ -4,7 +4,8 @@ import Draw3D from '../graphics/Draw3D';
 import {sleep} from '../util/JsUtil';
 import {CanvasEnabledKeys, KeyCodes} from './KeyCodes';
 import InputTracking from './InputTracking';
-import {canvas, canvas2d} from '../graphics/Canvas';
+import {canvas, canvas2d, canvasOverlay} from '../graphics/Canvas';
+import {Renderer} from '../renderer/Renderer';
 
 export default abstract class GameShell {
     static getParameter(name: string): string {
@@ -63,7 +64,7 @@ export default abstract class GameShell {
     private ny: number = 0;
 
     constructor(resizetoFit: boolean = false) {
-        canvas.tabIndex = -1;
+        canvasOverlay.tabIndex = -1;
         canvas2d.fillStyle = 'black';
         canvas2d.fillRect(0, 0, canvas.width, canvas.height);
         this.resizeToFit = resizetoFit;
@@ -93,6 +94,7 @@ export default abstract class GameShell {
         canvas.height = height;
         this.drawArea = new PixMap(width, height);
         Draw3D.init2D();
+        Renderer.resize(width, height);
     };
 
     run = async (): Promise<void> => {
@@ -107,27 +109,27 @@ export default abstract class GameShell {
         );
 
         // pc
-        canvas.onmousedown = this.onmousedown;
-        canvas.onmouseup = this.onmouseup;
-        canvas.onmouseenter = this.onmouseenter;
-        canvas.onmouseleave = this.onmouseleave;
-        canvas.onmousemove = this.onmousemove;
+        canvasOverlay.onmousedown = this.onmousedown;
+        canvasOverlay.onmouseup = this.onmouseup;
+        canvasOverlay.onmouseenter = this.onmouseenter;
+        canvasOverlay.onmouseleave = this.onmouseleave;
+        canvasOverlay.onmousemove = this.onmousemove;
         window.onbeforeunload = this.unload;
-        canvas.onfocus = this.onfocus;
-        canvas.onblur = this.onblur;
+        canvasOverlay.onfocus = this.onfocus;
+        canvasOverlay.onblur = this.onblur;
 
         if (this.isMobile) {
-            canvas.ontouchstart = this.ontouchstart;
-            canvas.ontouchend = this.ontouchend;
-            canvas.ontouchmove = this.ontouchmove;
+            canvasOverlay.ontouchstart = this.ontouchstart;
+            canvasOverlay.ontouchend = this.ontouchend;
+            canvasOverlay.ontouchmove = this.ontouchmove;
         } else {
-            canvas.onkeydown = this.onkeydown;
-            canvas.onkeyup = this.onkeyup;
+            canvasOverlay.onkeydown = this.onkeydown;
+            canvasOverlay.onkeyup = this.onkeyup;
         }
 
         // Preventing mouse events from bubbling up to the context menu in the browser for our canvas.
         // This may need to be hooked up to our own context menu in the future.
-        canvas.oncontextmenu = (e: MouseEvent): void => {
+        canvasOverlay.oncontextmenu = (e: MouseEvent): void => {
             e.preventDefault();
         };
 

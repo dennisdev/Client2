@@ -2,7 +2,7 @@ import Draw2D from './Draw2D';
 import Pix8 from './Pix8';
 import Jagfile from '../io/Jagfile';
 import {Int32Array2d, TypedArray1d} from '../util/Arrays';
-import {Renderer} from '../renderer/WebGPURenderer';
+import {Renderer} from '../renderer/Renderer';
 
 // noinspection JSSuspiciousNameCombination,DuplicatedCode
 export default class Draw3D extends Draw2D {

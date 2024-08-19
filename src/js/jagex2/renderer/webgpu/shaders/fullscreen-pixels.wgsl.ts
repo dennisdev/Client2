@@ -1,4 +1,4 @@
-import {UNPACK_COLOR888} from './shader-commons.wgsl';
+import {UNPACK_COLOR888} from './commons.wgsl';
 
 export const SHADER_CODE: string = `
 struct PixelBuffer {

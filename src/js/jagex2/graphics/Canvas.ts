@@ -1,3 +1,5 @@
+export const canvasContainer: HTMLElement = document.getElementById('canvas-container')!;
+export const canvasOverlay: HTMLElement = document.getElementById('canvas-overlay')!;
 export const canvas: HTMLCanvasElement = document.getElementById('canvas') as HTMLCanvasElement;
 export const canvas2d: CanvasRenderingContext2D = canvas.getContext('2d', {willReadFrequently: true})!;
 
