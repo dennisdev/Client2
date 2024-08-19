@@ -641,6 +641,7 @@ export default abstract class GameShell {
             }
 
             const input: HTMLInputElement = document.createElement('input');
+            input.style.zIndex = '20';
             if (this.insideUsernameArea()) {
                 input.setAttribute('id', 'username');
                 input.setAttribute('placeholder', 'Username');
