@@ -106,6 +106,8 @@ export class RendererWebGPU extends Renderer {
 
     texturesUsed: boolean[] = new Array(TEXTURE_COUNT).fill(false);
 
+    textureStagingBuffers: GPUBuffer[] = [];
+
     frameCount: number = 0;
 
     static hasWebGPUSupport(): boolean {
@@ -495,12 +497,12 @@ export class RendererWebGPU extends Renderer {
     }
 
     updatePalette(): void {
-        this.device.queue.writeBuffer(this.lutsBuffer, 0, new Uint32Array(Draw3D.palette));
+        this.device.queue.writeBuffer(this.lutsBuffer, 0, Draw3D.palette);
     }
 
     updateTextures(): void {
         for (let i: number = 0; i < TEXTURE_COUNT; i++) {
-            this.updateTexture(i);
+            this.updateTexture(i, false);
         }
         const texturesTranslucentData: Uint32Array = new Uint32Array(TEXTURES_TRANSLUCENT_BYTES);
         for (let i: number = 0; i < TEXTURE_COUNT; i++) {
@@ -509,12 +511,39 @@ export class RendererWebGPU extends Renderer {
         this.device.queue.writeBuffer(this.lutsBuffer, PALETTE_BYTES, texturesTranslucentData);
     }
 
-    override updateTexture(id: number): void {
+    override updateTexture(id: number, stage: boolean = true): void {
         const texels: Int32Array | null = Draw3D.getTexels(id);
         if (!texels) {
             return;
         }
-        this.device.queue.writeBuffer(this.lutsBuffer, PALETTE_BYTES + TEXTURES_TRANSLUCENT_BYTES + id * TEXTURE_PIXEL_COUNT * 4 * 4, new Uint32Array(texels));
+        const textureBytes: number = TEXTURE_PIXEL_COUNT * 4 * 4;
+        const lutsOffset: number = PALETTE_BYTES + TEXTURES_TRANSLUCENT_BYTES + id * textureBytes;
+        if (stage) {
+            let stagingBuffer: GPUBuffer;
+            if (this.textureStagingBuffers.length > 0) {
+                stagingBuffer = this.textureStagingBuffers.pop()!;
+            } else {
+                stagingBuffer = this.device.createBuffer({
+                    size: textureBytes,
+                    usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.MAP_WRITE,
+                    mappedAtCreation: true
+                });
+            }
+
+            new Uint32Array(stagingBuffer.getMappedRange()).set(texels);
+
+            stagingBuffer.unmap();
+
+            const encoder: GPUCommandEncoder = this.device.createCommandEncoder();
+            encoder.copyBufferToBuffer(stagingBuffer, 0, this.lutsBuffer, lutsOffset, textureBytes);
+            this.device.queue.submit([encoder.finish()]);
+
+            stagingBuffer.mapAsync(GPUMapMode.WRITE).then((): void => {
+                this.textureStagingBuffers.push(stagingBuffer);
+            });
+        } else {
+            this.device.queue.writeBuffer(this.lutsBuffer, lutsOffset, texels);
+        }
     }
 
     override setBrightness(brightness: number): void {
