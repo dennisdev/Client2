@@ -641,7 +641,6 @@ export default abstract class GameShell {
             }
 
             const input: HTMLInputElement = document.createElement('input');
-            input.style.zIndex = '20';
             if (this.insideUsernameArea()) {
                 input.setAttribute('id', 'username');
                 input.setAttribute('placeholder', 'Username');
@@ -664,7 +663,7 @@ export default abstract class GameShell {
             input.setAttribute('autofocus', 'autofocus');
             input.setAttribute('spellcheck', 'false');
             input.setAttribute('autocomplete', 'off');
-            input.setAttribute('style', `position: fixed; left: ${clientX}px; top: ${clientY}px; width: 1px; height: 1px; opacity: 0;`);
+            input.setAttribute('style', `position: fixed; left: ${clientX}px; top: ${clientY}px; width: 1px; height: 1px; opacity: 0; z-index: 20;`);
             document.body.appendChild(input);
 
             input.focus();
