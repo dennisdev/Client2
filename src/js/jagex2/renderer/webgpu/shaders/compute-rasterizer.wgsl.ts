@@ -15,7 +15,7 @@ struct LUTs {
 @group(0) @binding(0) var<storage, read_write> pixelBuffer: PixelBuffer;
 @group(0) @binding(1) var<storage, read_write> depthBuffer: array<atomic<i32>>;
 @group(0) @binding(2) var<storage, read> luts: LUTs;
-@group(1) @binding(0) var<storage, read> calls: array<i32>;
+@group(1) @binding(0) var<storage, read> triangleData: array<i32>;
 
 @compute @workgroup_size(256, 1)
 fn clear(@builtin(global_invocation_id) global_id: vec3u) {
@@ -50,22 +50,22 @@ var<private> writeDepth = false;
 @compute @workgroup_size(1, 1)
 fn renderFlat(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 8;
-  depth = calls[offset];
+  depth = triangleData[offset];
   rasterTriangle(
-    calls[offset + 1], calls[offset + 2], calls[offset + 3],
-    calls[offset + 4], calls[offset + 5], calls[offset + 6],
-    calls[offset + 7],
+    triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+    triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
+    triangleData[offset + 7],
   );
 }
 
 @compute @workgroup_size(1, 1)
 fn renderFlatDepth(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 8;
-  depth = calls[offset];
+  depth = triangleData[offset];
   writeDepth = true;
   rasterTriangle(
-    calls[offset + 1], calls[offset + 2], calls[offset + 3],
-    calls[offset + 4], calls[offset + 5], calls[offset + 6],
+    triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+    triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
     0,
   );
 }
@@ -73,22 +73,22 @@ fn renderFlatDepth(@builtin(global_invocation_id) global_id: vec3u) {
 @compute @workgroup_size(1, 1)
 fn renderGouraud(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 10;
-  depth = calls[offset];
+  depth = triangleData[offset];
   rasterGouraudTriangle(
-    calls[offset + 1], calls[offset + 2], calls[offset + 3],
-    calls[offset + 4], calls[offset + 5], calls[offset + 6],
-    calls[offset + 7], calls[offset + 8], calls[offset + 9],
+    triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+    triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
+    triangleData[offset + 7], triangleData[offset + 8], triangleData[offset + 9],
   );
 }
 
 @compute @workgroup_size(1, 1)
 fn renderGouraudDepth(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 10;
-  depth = calls[offset];
+  depth = triangleData[offset];
   writeDepth = true;
   rasterTriangle(
-    calls[offset + 1], calls[offset + 2], calls[offset + 3],
-    calls[offset + 4], calls[offset + 5], calls[offset + 6],
+    triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+    triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
     0,
   );
 }
@@ -96,62 +96,62 @@ fn renderGouraudDepth(@builtin(global_invocation_id) global_id: vec3u) {
 @compute @workgroup_size(1, 1)
 fn renderTextured(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 20;
-  depth = calls[offset];
+  depth = triangleData[offset];
   rasterTexturedTriangle(
-    calls[offset + 1], calls[offset + 2], calls[offset + 3],
-    calls[offset + 4], calls[offset + 5], calls[offset + 6],
-    calls[offset + 7], calls[offset + 8], calls[offset + 9],
-    calls[offset + 10], calls[offset + 11], calls[offset + 12],
-    calls[offset + 13], calls[offset + 14], calls[offset + 15],
-    calls[offset + 16], calls[offset + 17], calls[offset + 18],
-    calls[offset + 19],
+    triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+    triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
+    triangleData[offset + 7], triangleData[offset + 8], triangleData[offset + 9],
+    triangleData[offset + 10], triangleData[offset + 11], triangleData[offset + 12],
+    triangleData[offset + 13], triangleData[offset + 14], triangleData[offset + 15],
+    triangleData[offset + 16], triangleData[offset + 17], triangleData[offset + 18],
+    triangleData[offset + 19],
   );
 }
 
 @compute @workgroup_size(1, 1)
 fn renderTexturedDepth(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 20;
-  depth = calls[offset];
+  depth = triangleData[offset];
   writeDepth = true;
-  opaqueTexture = luts.texturesTranslucent[calls[offset + 19]] == 0;
+  opaqueTexture = luts.texturesTranslucent[triangleData[offset + 19]] == 0;
   if (opaqueTexture) {
     rasterTriangle(
-      calls[offset + 1], calls[offset + 2], calls[offset + 3],
-      calls[offset + 4], calls[offset + 5], calls[offset + 6],
+      triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+      triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
       0,
     );
   } else {
     rasterTexturedTriangle(
-      calls[offset + 1], calls[offset + 2], calls[offset + 3],
-      calls[offset + 4], calls[offset + 5], calls[offset + 6],
-      calls[offset + 7], calls[offset + 8], calls[offset + 9],
-      calls[offset + 10], calls[offset + 11], calls[offset + 12],
-      calls[offset + 13], calls[offset + 14], calls[offset + 15],
-      calls[offset + 16], calls[offset + 17], calls[offset + 18],
-      calls[offset + 19],
+      triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+      triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
+      triangleData[offset + 7], triangleData[offset + 8], triangleData[offset + 9],
+      triangleData[offset + 10], triangleData[offset + 11], triangleData[offset + 12],
+      triangleData[offset + 13], triangleData[offset + 14], triangleData[offset + 15],
+      triangleData[offset + 16], triangleData[offset + 17], triangleData[offset + 18],
+      triangleData[offset + 19],
     );
   }
 }
 
 @compute @workgroup_size(1, 1)
 fn renderAlpha(@builtin(global_invocation_id) global_id: vec3u) {
-  let triangleCount = i32(arrayLength(&calls)) / 10;
+  let triangleCount = i32(arrayLength(&triangleData)) / 10;
   for (var i = 0; i < triangleCount; i++) {
     let offset = i * 10;
-    depth = calls[offset] & 0x7fffff;
-    alpha = (calls[offset] >> 23) & 0xff;
-    var isFlat = (u32(calls[offset]) >> 31) == 1;
+    depth = triangleData[offset] & 0x7fffff;
+    alpha = (triangleData[offset] >> 23) & 0xff;
+    var isFlat = (u32(triangleData[offset]) >> 31) == 1;
     if (isFlat) {
       rasterTriangle(
-        calls[offset + 1], calls[offset + 2], calls[offset + 3],
-        calls[offset + 4], calls[offset + 5], calls[offset + 6],
-        calls[offset + 7],
+        triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+        triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
+        triangleData[offset + 7],
       );
     } else {
       rasterGouraudTriangle(
-        calls[offset + 1], calls[offset + 2], calls[offset + 3],
-        calls[offset + 4], calls[offset + 5], calls[offset + 6],
-        calls[offset + 7], calls[offset + 8], calls[offset + 9],
+        triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
+        triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
+        triangleData[offset + 7], triangleData[offset + 8], triangleData[offset + 9],
       );
     }
   }
