@@ -4299,7 +4299,13 @@ class Game extends Client {
                                 } else {
                                     try {
                                         Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                                        if (!Renderer.renderer) {
+                                            this.addMessage(0, 'Failed to enable webgpu', '');
+                                        }
                                     } catch (e) {
+                                        if (e instanceof Error) {
+                                            this.addMessage(0, 'Error enabling webgpu: ' + e.message, '');
+                                        }
                                         console.error('Failed creating webgpu renderer', e);
                                     }
                                 }

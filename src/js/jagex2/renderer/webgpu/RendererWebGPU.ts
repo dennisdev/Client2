@@ -118,7 +118,7 @@ export class RendererWebGPU extends Renderer {
         const adapter: GPUAdapter | null = await navigator.gpu?.requestAdapter();
         const device: GPUDevice | undefined = await adapter?.requestDevice();
         if (!device) {
-            return;
+            throw new Error('Could not request WebGPU device');
         }
         const canvas: HTMLCanvasElement = document.createElement('canvas');
         canvas.width = width;
@@ -132,7 +132,7 @@ export class RendererWebGPU extends Renderer {
         const context: GPUCanvasContext | null = canvas.getContext('webgpu');
         if (!context) {
             canvas.remove();
-            return;
+            throw new Error('Could not create WebGPU context');
         }
         const presentationFormat: GPUTextureFormat = navigator.gpu.getPreferredCanvasFormat();
         context.configure({
