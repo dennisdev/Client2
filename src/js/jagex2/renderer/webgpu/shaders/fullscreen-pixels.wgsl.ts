@@ -2,7 +2,7 @@ import {UNPACK_COLOR888} from './commons.wgsl';
 
 export const SHADER_CODE: string = `
 struct PixelBuffer {
-  data: array<i32>,
+  data: array<u32>,
 };
 
 struct Uniforms {

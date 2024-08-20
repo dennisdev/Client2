@@ -1,27 +1,27 @@
 export const SHADER_CODE: string = `
 struct PixelBuffer {
-  data: array<i32>,
+  data: array<u32>,
 };
 
 const textureCount = 50;
 
 // Look-up tables
 struct LUTs {
-  palette: array<i32, 65536>,
+  palette: array<u32, 65536>,
   texturesTranslucent: array<i32, textureCount>,
-  textures: array<array<i32, 65536>, textureCount>,
+  textures: array<array<u32, 65536>, textureCount>,
 };
 
 @group(0) @binding(0) var<storage, read_write> pixelBuffer: PixelBuffer;
-@group(0) @binding(1) var<storage, read_write> depthBuffer: array<atomic<i32>>;
+@group(0) @binding(1) var<storage, read_write> depthBuffer: array<atomic<u32>>;
 @group(0) @binding(2) var<storage, read> luts: LUTs;
 @group(1) @binding(0) var<storage, read> triangleData: array<i32>;
 
 @compute @workgroup_size(256, 1)
 fn clear(@builtin(global_invocation_id) global_id: vec3u) {
   let index = global_id.x;
-  pixelBuffer.data[index] = 0;
-  atomicStore(&depthBuffer[index], 0);
+  pixelBuffer.data[index] = 0u;
+  atomicStore(&depthBuffer[index], 0u);
 }
 
 const width = 512;
@@ -40,28 +40,28 @@ const boundX = width - 1;
 
 var<private> jagged = true;
 var<private> clipX = false;
-var<private> alpha = 0;
+var<private> alpha = 0u;
 
 var<private> opaqueTexture = true;
 
-var<private> depth = 0;
+var<private> depth = 0u;
 var<private> writeDepth = false;
 
 @compute @workgroup_size(1, 1)
 fn renderFlat(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 8;
-  depth = triangleData[offset];
+  depth = u32(triangleData[offset]);
   rasterTriangle(
     triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
     triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
-    triangleData[offset + 7],
+    u32(triangleData[offset + 7]),
   );
 }
 
 @compute @workgroup_size(1, 1)
 fn renderFlatDepth(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 8;
-  depth = triangleData[offset];
+  depth = u32(triangleData[offset]);
   writeDepth = true;
   rasterTriangle(
     triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
@@ -73,7 +73,7 @@ fn renderFlatDepth(@builtin(global_invocation_id) global_id: vec3u) {
 @compute @workgroup_size(1, 1)
 fn renderGouraud(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 10;
-  depth = triangleData[offset];
+  depth = u32(triangleData[offset]);
   rasterGouraudTriangle(
     triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
     triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
@@ -84,7 +84,7 @@ fn renderGouraud(@builtin(global_invocation_id) global_id: vec3u) {
 @compute @workgroup_size(1, 1)
 fn renderGouraudDepth(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 10;
-  depth = triangleData[offset];
+  depth = u32(triangleData[offset]);
   writeDepth = true;
   rasterTriangle(
     triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
@@ -96,7 +96,7 @@ fn renderGouraudDepth(@builtin(global_invocation_id) global_id: vec3u) {
 @compute @workgroup_size(1, 1)
 fn renderTextured(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 20;
-  depth = triangleData[offset];
+  depth = u32(triangleData[offset]);
   rasterTexturedTriangle(
     triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
     triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
@@ -111,7 +111,7 @@ fn renderTextured(@builtin(global_invocation_id) global_id: vec3u) {
 @compute @workgroup_size(1, 1)
 fn renderTexturedDepth(@builtin(global_invocation_id) global_id: vec3u) {
   let offset = global_id.x * 20;
-  depth = triangleData[offset];
+  depth = u32(triangleData[offset]);
   writeDepth = true;
   opaqueTexture = luts.texturesTranslucent[triangleData[offset + 19]] == 0;
   if (opaqueTexture) {
@@ -138,14 +138,14 @@ fn renderAlpha(@builtin(global_invocation_id) global_id: vec3u) {
   let triangleCount = i32(arrayLength(&triangleData)) / 10;
   for (var i = 0; i < triangleCount; i++) {
     let offset = i * 10;
-    depth = triangleData[offset] & 0x7fffff;
-    alpha = (triangleData[offset] >> 23) & 0xff;
+    depth = u32(triangleData[offset] & 0x7fffff);
+    alpha = u32((triangleData[offset] >> 23) & 0xff);
     var isFlat = (u32(triangleData[offset]) >> 31) == 1;
     if (isFlat) {
       rasterTriangle(
         triangleData[offset + 1], triangleData[offset + 2], triangleData[offset + 3],
         triangleData[offset + 4], triangleData[offset + 5], triangleData[offset + 6],
-        triangleData[offset + 7],
+        u32(triangleData[offset + 7]),
       );
     } else {
       rasterGouraudTriangle(
@@ -157,13 +157,13 @@ fn renderAlpha(@builtin(global_invocation_id) global_id: vec3u) {
   }
 }
 
-fn setPixel(index: i32, value: i32) {
+fn setPixel(index: i32, value: u32) {
   if (atomicLoad(&depthBuffer[index]) <= depth) {
     pixelBuffer.data[index] = value;
   }
 }
 
-fn rasterTriangle(x0In: i32, x1In: i32, x2In: i32, y0In: i32, y1In: i32, y2In: i32, color: i32) {
+fn rasterTriangle(x0In: i32, x1In: i32, x2In: i32, y0In: i32, y1In: i32, y2In: i32, color: u32) {
   var x0 = x0In;
   var x1 = x1In;
   var x2 = x2In;
@@ -574,7 +574,7 @@ fn rasterTriangle(x0In: i32, x1In: i32, x2In: i32, y0In: i32, y1In: i32, y2In: i
   }
 }
 
-fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgbIn: i32) {
+fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgbIn: u32) {
   var x0 = x0In;
   var x1 = x1In;
   var offset = offsetIn;
@@ -605,7 +605,7 @@ fn rasterScanline(x0In: i32, x1In: i32, offsetIn: i32, rgbIn: i32) {
     let alpha = alpha;
     let invAlpha = 256 - alpha;
     rgb = ((((rgb & 0xff00ff) * invAlpha) >> 8) & 0xff00ff) + ((((rgb & 0xff00) * invAlpha) >> 8) & 0xff00);
-    var blendRgb: i32;
+    var blendRgb: u32;
     while (true) {
       length--;
       if (length < 0) {
@@ -1141,7 +1141,7 @@ fn rasterGouraudScanline(x0In: i32, x1In: i32, color0In: i32, color1: i32, offse
   var color0 = color0In;
   var offset = offsetIn;
 
-  var rgb: i32;
+  var rgb: u32;
   if (jagged) {
     var colorStep: i32;
     var length: i32;
@@ -1210,7 +1210,7 @@ fn rasterGouraudScanline(x0In: i32, x1In: i32, color0In: i32, color1: i32, offse
     } else {
       let alpha = alpha;
       let invAlpha = 256 - alpha;
-      var blendRgb: i32;
+      var blendRgb: u32;
       while (true) {
         length--;
         if (length < 0) {
@@ -1902,7 +1902,7 @@ fn rasterTexturedScanline(
   xAIn: i32, 
   xBIn: i32, 
   offsetIn: i32, 
-  texels: ptr<storage, array<i32, 65536>>, 
+  texels: ptr<storage, array<u32, 65536>>, 
   curUIn: i32, 
   curVIn: i32, 
   uIn: i32, 
