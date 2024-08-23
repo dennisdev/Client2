@@ -4,6 +4,7 @@ export const SHADER_CODE: string = `
 #version 300 es
 
 precision highp float;
+precision highp int;
 
 in vec2 v_texCoord;
 in vec3 v_barycentric;
@@ -12,14 +13,14 @@ out vec4 fragColor;
 
 const vec2 vertices[3] = vec2[3](
     vec2(20, 200),
-    vec2(400, 200),
+    vec2(400, 190),
     vec2(200, 20)
 );
 
 const int colors[3] = int[3](
-    127,
-    127,
-    127
+    56255,
+    959,
+    22463
 );
 
 const float brightness = 0.9;
@@ -37,6 +38,10 @@ int reciprocal15(int value) {
 }
 
 vec3 getScanlineColor(int xA, int xB, int colorA, int colorB) {
+    int fragX = int(gl_FragCoord.x);
+    if (fragX < xA || fragX >= xB) {
+        discard;
+    }
     int colorStep;
     int length;
     if (xA < xB) {
@@ -45,9 +50,9 @@ vec3 getScanlineColor(int xA, int xB, int colorA, int colorB) {
             colorStep = (colorB - colorA) * reciprocal15(length) >> 15;
         }
     } else {
-        return vec3(1.0, 0.0, 1.0); 
+        discard;
     }
-    int scanlineX = int(gl_FragCoord.x) - xA;
+    int scanlineX = fragX - xA;
     colorA += colorStep * (scanlineX >> 2);
     return hslToRgb(colorA >> 8, brightness);
 }
@@ -58,17 +63,23 @@ void main() {
     fragColor = vec4(1.0, 0.0, 0.0, 1.0);
     // fragColor.r = x / 512.0;
     // fragColor.r = y / 255.0;
-    int xA = int(vertices[0].x);
-    int xB = int(vertices[1].x);
-    int xC = int(vertices[2].x);
-    int yA = int(vertices[0].y);
-    int yB = int(vertices[1].y);
-    int yC = int(vertices[2].y);
+    int xA = int(vertices[0].x + 0.5);
+    int xB = int(vertices[1].x + 0.5);
+    int xC = int(vertices[2].x + 0.5);
+    int yA = int(vertices[0].y + 0.5);
+    int yB = int(vertices[1].y + 0.5);
+    int yC = int(vertices[2].y + 0.5);
     int colorA = colors[0];
     int colorB = colors[1];
     int colorC = colors[2];
 
-    int scanlineY = int(height - gl_FragCoord.y - 1.0) - min(yA, min(yB, yC));
+    int minScanlineY = min(yA, min(yB, yC));
+    int maxScanlineY = max(yA, max(yB, yC));
+    int scanlineY = int(height - gl_FragCoord.y - 1.0) - minScanlineY + 1;
+    if (scanlineY < 0 || scanlineY >= maxScanlineY - minScanlineY) {
+        discard;
+    }
+    // scanlineY++;
     // fragColor.r = float(scanlineY) / 255.0;
 
     int dxAB = xB - xA;
@@ -166,8 +177,11 @@ void main() {
 					
                 while (--yB >= 0) {
                     if (currentScanline == scanlineY) {
-                        fragColor.rgb = hslToRgb(colorC >> 7 >> 8, brightness);
+                        // fragColor.rgb = hslToRgb(colorC >> 7 >> 8, brightness);
                         fragColor.rgb = getScanlineColor(xC >> 16, xA >> 16, colorC >> 7, colorA >> 7);
+                        // if (currentScanline == 10) {
+                        //     fragColor.rgb = vec3(0.0, 1.0, 0.0);
+                        // }
                     }
 					// gouraudRaster(xC >> 16, xA >> 16, colorC >> 7, colorA >> 7, data, yC, 0);
 					xA += xStepBC;
@@ -179,8 +193,11 @@ void main() {
 				}
 				while (--yA >= 0) {
                     if (currentScanline == scanlineY) {
-                        fragColor.rgb = hslToRgb(colorC >> 7 >> 8, brightness);
+                        // fragColor.rgb = hslToRgb(colorC >> 7 >> 8, brightness);
                         fragColor.rgb = getScanlineColor(xC >> 16, xB >> 16, colorC >> 7, colorB >> 7);
+                        // if (currentScanline == 10) {
+                        //     fragColor.rgb = vec3(0.0, 1.0, 0.0);
+                        // }
                     }
 					// gouraudRaster(xC >> 16, xB >> 16, colorC >> 7, colorB >> 7, data, yC, 0);
 					xB += xStepAB;
@@ -195,7 +212,7 @@ void main() {
         }
     }
         
-    fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    // fragColor = vec4(1.0, 1.0, 1.0, 1.0);
 }
 
 `.trim();

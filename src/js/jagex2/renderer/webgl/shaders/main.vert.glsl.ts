@@ -10,21 +10,29 @@ const vec2 dimensions = vec2(width, height);
 
 const vec2 vertices[3] = vec2[3](
     vec2(20, 200),
-    vec2(400, 200),
+    vec2(400, 190),
     vec2(200, 20)
 );
 
-const vec3 barycentric[3] = vec3[3](
-    vec3(1, 0, 0),
-    vec3(0, 1, 0),
-    vec3(0, 0, 1)
-);
+// const vec3 barycentric[3] = vec3[3](
+//     vec3(1, 0, 0),
+//     vec3(0, 1, 0),
+//     vec3(0, 0, 1)
+// );
+
+// const vec2 vertices[3] = vec2[3](
+//     vec2(-1, -1), 
+//     vec2( 3, -1), 
+//     vec2(-1,  3)
+// );
 
 void main() {
     vec2 screenPos = vertices[gl_VertexID];
     screenPos.y = height - screenPos.y - 1.0;
     gl_Position = vec4(screenPos / dimensions * 2.0 - 1.0, 0.0, 1.0);
-    v_texCoord = gl_Position.xy * 0.5 + 0.5;
-    v_barycentric = barycentric[gl_VertexID];
+    // v_texCoord = gl_Position.xy * 0.5 + 0.5;
+    // v_barycentric = barycentric[gl_VertexID];
+    
+    // gl_Position = vec4(vertices[gl_VertexID], 0.0, 1.0);
 }
 `.trim();

@@ -1786,7 +1786,9 @@ class Game extends Client {
             // vec2(20, 200),
             // vec2(400, 200),
             // vec2(200, 20)
-            Draw3D.fillGouraudTriangle(20, 400, 200, 200, 200, 20, 0, 127, 127);
+            Draw3D.debug = true;
+            Draw3D.fillGouraudTriangle(20, 400, 200, 200, 190, 20, 56255, 959, 22463);
+            Draw3D.debug = false;
         }
         Renderer.endRenderScene();
         this.scene?.clearTemporaryLocs();
