@@ -69,6 +69,7 @@ import {Host, Peer} from './jagex2/io/RTCDataChannels';
 import {canvasContainer} from './jagex2/graphics/Canvas';
 import {Renderer} from './jagex2/renderer/Renderer';
 import {RendererWebGPU} from './jagex2/renderer/webgpu/RendererWebGPU';
+import {RendererWebGL} from './jagex2/renderer/webgl/RendererWebGL';
 
 // noinspection JSSuspiciousNameCombination
 class Game extends Client {
@@ -330,10 +331,15 @@ class Game extends Client {
             WordFilter.unpack(wordenc);
             this.initializeLevelExperience();
 
+            // try {
+            //     Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+            // } catch (e) {
+            //     console.error('Failed creating webgpu renderer', e);
+            // }
             try {
-                Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                Renderer.renderer = RendererWebGL.init(canvasContainer, this.width, this.height);
             } catch (e) {
-                console.error('Failed creating webgpu renderer', e);
+                console.error('Failed creating webgl renderer', e);
             }
         } catch (err) {
             console.error(err);
@@ -1775,7 +1781,13 @@ class Game extends Client {
         Model.mouseY = this.mouseY - 11;
         Draw2D.clear(Renderer.getSceneClearColor());
         Renderer.startRenderScene();
-        this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
+        // this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
+        if (!Renderer.renderer) {
+            // vec2(20, 200),
+            // vec2(400, 200),
+            // vec2(200, 20)
+            Draw3D.fillGouraudTriangle(20, 400, 200, 200, 200, 20, 0, 127, 127);
+        }
         Renderer.endRenderScene();
         this.scene?.clearTemporaryLocs();
         this.draw2DEntityElements();
@@ -4298,7 +4310,8 @@ class Game extends Client {
                                     Renderer.resetRenderer();
                                 } else {
                                     try {
-                                        Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                                        // Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                                        Renderer.renderer = RendererWebGL.init(canvasContainer, this.width, this.height);
                                         if (!Renderer.renderer) {
                                             this.addMessage(0, 'Failed to enable webgpu', '');
                                         }
