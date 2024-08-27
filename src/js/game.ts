@@ -1781,15 +1781,7 @@ class Game extends Client {
         Model.mouseY = this.mouseY - 11;
         Draw2D.clear(Renderer.getSceneClearColor());
         Renderer.startRenderScene();
-        // this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
-        if (!Renderer.renderer) {
-            // vec2(20, 200),
-            // vec2(400, 200),
-            // vec2(200, 20)
-            Draw3D.debug = true;
-            Draw3D.fillGouraudTriangle(20, 400, 200, 200, 190, 20, 56255, 959, 22463);
-            Draw3D.debug = false;
-        }
+        this.scene?.draw(this.cameraX, this.cameraY, this.cameraZ, level, this.cameraYaw, this.cameraPitch, this.loopCycle);
         Renderer.endRenderScene();
         this.scene?.clearTemporaryLocs();
         this.draw2DEntityElements();
@@ -4284,6 +4276,24 @@ class Game extends Client {
                         if (key >= 32 && key <= 122 && this.chatTyped.length < 80) {
                             this.chatTyped = this.chatTyped + String.fromCharCode(key);
                             this.redrawChatback = true;
+                            if (String.fromCharCode(key) === 'h') {
+                                if (Renderer.renderer) {
+                                    Renderer.resetRenderer();
+                                } else {
+                                    try {
+                                        // Renderer.renderer = await RendererWebGPU.init(canvasContainer, this.width, this.height);
+                                        Renderer.renderer = RendererWebGL.init(canvasContainer, this.width, this.height);
+                                        if (!Renderer.renderer) {
+                                            this.addMessage(0, 'Failed to enable webgpu', '');
+                                        }
+                                    } catch (e) {
+                                        if (e instanceof Error) {
+                                            this.addMessage(0, 'Error enabling webgpu: ' + e.message, '');
+                                        }
+                                        console.error('Failed creating webgpu renderer', e);
+                                    }
+                                }
+                            }
                         }
 
                         if (key === 8 && this.chatTyped.length > 0) {

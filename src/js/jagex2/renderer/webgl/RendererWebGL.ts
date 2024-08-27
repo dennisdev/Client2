@@ -10,6 +10,8 @@ import {SHADER_CODE as textureVertShaderCode} from './shaders/fullscreen-texture
 import {SHADER_CODE as mainFragShaderCode} from './shaders/main.frag.glsl';
 import {SHADER_CODE as mainVertShaderCode} from './shaders/main.vert.glsl';
 
+const INITIAL_TRIANGLES: number = 100000;
+
 export class RendererWebGL extends Renderer {
     pixMapProgram!: ShaderProgram;
     textureProgram!: ShaderProgram;
@@ -21,6 +23,10 @@ export class RendererWebGL extends Renderer {
     texturesToDelete: WebGLTexture[] = [];
 
     isRenderingScene: boolean = false;
+
+    gouraudTriangleData: Uint32Array = new Uint32Array(INITIAL_TRIANGLES * 4);
+    gouraudTriangleDataView: DataView = new DataView(this.gouraudTriangleData.buffer);
+    gouraudTriangleCount: number = 0;
 
     static init(container: HTMLElement, width: number, height: number): RendererWebGL {
         const canvas: HTMLCanvasElement = document.createElement('canvas');
@@ -128,6 +134,7 @@ export class RendererWebGL extends Renderer {
 
     override startRenderScene(): void {
         this.isRenderingScene = true;
+        this.gouraudTriangleCount = 0;
     }
 
     override endRenderScene(): void {
@@ -142,8 +149,24 @@ export class RendererWebGL extends Renderer {
         this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-        this.mainProgram.use();
-        this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
+        // console.log('Rendering scene', this.gouraudTriangleCount);
+
+        if (this.gouraudTriangleCount > 0) {
+            const texture: WebGLTexture = this.gl.createTexture()!;
+            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+            this.gl.texStorage2D(this.gl.TEXTURE_2D, 1, this.gl.RGBA32UI, this.gouraudTriangleCount, 1);
+            this.gl.texSubImage2D(this.gl.TEXTURE_2D, 0, 0, 0, this.gouraudTriangleCount, 1, this.gl.RGBA_INTEGER, this.gl.UNSIGNED_INT, this.gouraudTriangleData);
+
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+
+            this.mainProgram.use();
+            this.gl.drawArrays(this.gl.TRIANGLES, 0, this.gouraudTriangleCount * 3);
+
+            this.texturesToDelete.push(texture);
+        }
 
         this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
     }
@@ -159,6 +182,35 @@ export class RendererWebGL extends Renderer {
         if (!this.isRenderingScene) {
             return false;
         }
+
+        let offset: number = this.gouraudTriangleCount * 4;
+
+        if (offset >= this.gouraudTriangleData.length) {
+            const newData: Uint32Array = new Uint32Array(this.gouraudTriangleData.length * 2);
+            newData.set(this.gouraudTriangleData);
+            this.gouraudTriangleData = newData;
+            this.gouraudTriangleDataView = new DataView(this.gouraudTriangleData.buffer);
+        }
+
+        xA += 2048;
+        xB += 2048;
+        xC += 2048;
+        yA += 2048;
+        yB += 2048;
+        yC += 2048;
+
+        this.gouraudTriangleDataView.setUint32(offset++ * 4, (xA << 20) | (xB << 8) | (xC >> 4), true);
+        this.gouraudTriangleDataView.setUint32(offset++ * 4, (yA << 20) | (yB << 8) | (xC & 0xf), true);
+        this.gouraudTriangleDataView.setUint32(offset++ * 4, (yC << 16) | colorA, true);
+        this.gouraudTriangleDataView.setUint32(offset++ * 4, (colorB << 16) | colorC, true);
+
+        // this.gouraudTriangleData[offset++] = (xA << 20) | (xB << 8) | (xC >> 4);
+        // this.gouraudTriangleData[offset++] = (yA << 20) | (yB << 8) | (xC & 0xf);
+        // this.gouraudTriangleData[offset++] = (yC << 16) | colorA;
+        // this.gouraudTriangleData[offset++] = (colorB << 16) | colorC;
+
+        this.gouraudTriangleCount++;
+
         return true;
     }
 
